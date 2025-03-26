@@ -334,19 +334,35 @@ export function ForecastChart({ baselineData, scenarioData, className, timeFrame
               <div className="h-px w-full bg-border my-2" />
               <p className="text-sm font-semibold">Transactions:</p>
               <div className="max-h-40 overflow-y-auto mt-1">
-                {periodData.transactions.slice(0, 5).map((t: any, i: number) => (
-                  <div key={`${t.id || i}`} className="text-xs mb-1 py-1 border-b border-border/50">
-                    <div className="flex justify-between">
-                      <span className="font-medium">{t.name}</span>
-                      <span className={t.amount >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
-                        {t.amount >= 0 ? '+' : '-'}{formatCurrency(Math.abs(t.amount))}
-                      </span>
+                {periodData.transactions.slice(0, 5).map((t: any, i: number) => {
+                  // Extract frequency information from description if available
+                  const frequencyMatch = t.description?.match(/\((biweekly|weekly|monthly|quarterly|annually|once|one-time)\)/i);
+                  const frequency = frequencyMatch ? frequencyMatch[1] : '';
+                  
+                  return (
+                    <div key={`${t.id || i}`} className="text-xs mb-1 py-1 border-b border-border/50">
+                      <div className="flex justify-between">
+                        <span className="font-medium">{t.name}</span>
+                        <span className={t.amount >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                          {t.amount >= 0 ? '+' : '-'}{formatCurrency(Math.abs(t.amount))}
+                        </span>
+                      </div>
+                      <div className="text-muted-foreground">
+                        {new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {t.category}
+                        {frequency && (
+                          <span className="ml-1 bg-secondary text-secondary-foreground rounded-full px-1.5 py-0.5 text-[10px]">
+                            {frequency.charAt(0).toUpperCase() + frequency.slice(1)}
+                          </span>
+                        )}
+                      </div>
+                      {t.description && (
+                        <div className="text-muted-foreground mt-0.5 text-[10px] truncate max-w-[280px]">
+                          {t.description.replace(/\((biweekly|weekly|monthly|quarterly|annually|once|one-time)\)/i, '')}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-muted-foreground">
-                      {new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {t.category}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {periodData.transactions.length > 5 && (
                   <div className="text-xs text-muted-foreground text-center pt-1">
                     + {periodData.transactions.length - 5} more transactions
@@ -361,19 +377,35 @@ export function ForecastChart({ baselineData, scenarioData, className, timeFrame
               <div className="h-px w-full bg-border my-2" />
               <p className="text-sm font-semibold text-emerald-500">Scenario Transactions:</p>
               <div className="max-h-40 overflow-y-auto mt-1">
-                {periodData.scenarioTransactions.slice(0, 5).map((t: any, i: number) => (
-                  <div key={`scenario-${t.id || i}`} className="text-xs mb-1 py-1 border-b border-border/50">
-                    <div className="flex justify-between">
-                      <span className="font-medium">{t.name}</span>
-                      <span className={t.amount >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
-                        {t.amount >= 0 ? '+' : '-'}{formatCurrency(Math.abs(t.amount))}
-                      </span>
+                {periodData.scenarioTransactions.slice(0, 5).map((t: any, i: number) => {
+                  // Extract frequency information from description if available
+                  const frequencyMatch = t.description?.match(/\((biweekly|weekly|monthly|quarterly|annually|once|one-time)\)/i);
+                  const frequency = frequencyMatch ? frequencyMatch[1] : '';
+                  
+                  return (
+                    <div key={`scenario-${t.id || i}`} className="text-xs mb-1 py-1 border-b border-border/50">
+                      <div className="flex justify-between">
+                        <span className="font-medium">{t.name}</span>
+                        <span className={t.amount >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                          {t.amount >= 0 ? '+' : '-'}{formatCurrency(Math.abs(t.amount))}
+                        </span>
+                      </div>
+                      <div className="text-muted-foreground">
+                        {new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {t.category}
+                        {frequency && (
+                          <span className="ml-1 bg-secondary text-secondary-foreground rounded-full px-1.5 py-0.5 text-[10px]">
+                            {frequency.charAt(0).toUpperCase() + frequency.slice(1)}
+                          </span>
+                        )}
+                      </div>
+                      {t.description && (
+                        <div className="text-muted-foreground mt-0.5 text-[10px] truncate max-w-[280px]">
+                          {t.description.replace(/\((biweekly|weekly|monthly|quarterly|annually|once|one-time)\)/i, '')}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-muted-foreground">
-                      {new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {t.category}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {periodData.scenarioTransactions.length > 5 && (
                   <div className="text-xs text-muted-foreground text-center pt-1">
                     + {periodData.scenarioTransactions.length - 5} more transactions

@@ -103,6 +103,32 @@ export default function BillsPage() {
     return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
 
+  // Convert expenses to bill-like format for combined display
+  const expensesAsBills = filteredExpenses.map(expense => ({
+    id: expense.id,
+    name: expense.name,
+    amount: expense.amount,
+    dueDate: expense.date, // Use expense date as due date
+    isPaid: true, // Treat expenses as "paid" since they've already occurred
+    paidDate: expense.date,
+    frequency: 'once' as const,
+    category: expense.category,
+    isRecurring: false,
+    autoPay: false,
+    userId: expense.userId,
+    createdAt: expense.createdAt,
+    updatedAt: expense.updatedAt,
+    isExpense: true, // Flag to identify this as an expense
+  }));
+
+  // Combine bills and expenses for unified display
+  const combinedItems = [...filteredBills, ...expensesAsBills].sort((a, b) => {
+    // Sort by due date (ascending)
+    const dateA = new Date(a.dueDate);
+    const dateB = new Date(b.dueDate);
+    return dateA.getTime() - dateB.getTime();
+  });
+
   // Open setup guide with correct step
   const handleOpenSetupGuide = (step: "bills" | "expenses") => {
     setSetupGuideStep(step);
@@ -309,7 +335,7 @@ export default function BillsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {filteredBills.length === 0 ? (
+                {combinedItems.length === 0 ? (
                   <div className="text-center py-10">
                     <CreditCard className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
                     <h3 className="mt-4 text-lg font-semibold">No bills found</h3>
@@ -328,36 +354,36 @@ export default function BillsPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {filteredBills.map((bill) => (
+                    {combinedItems.map((item) => (
                       <div
-                        key={bill.id}
+                        key={item.id}
                         className={`flex items-center justify-between p-4 rounded-lg border ${
-                          isOverdue(bill.dueDate) && !bill.isPaid
+                          isOverdue(item.dueDate) && !item.isPaid
                             ? "border-red-200 bg-red-50"
-                            : daysUntil(bill.dueDate) <= 3 && !bill.isPaid
+                            : daysUntil(item.dueDate) <= 3 && !item.isPaid
                             ? "border-amber-200 bg-amber-50"
-                            : bill.isPaid
+                            : item.isPaid
                             ? "border-green-200 bg-green-50"
                             : ""
                         }`}
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <p className="font-medium">{bill.name}</p>
-                            {bill.isPaid && (
+                            <p className="font-medium">{item.name}</p>
+                            {item.isPaid && (
                               <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
                                 Paid
                               </Badge>
                             )}
-                            {isOverdue(bill.dueDate) && !bill.isPaid && (
+                            {isOverdue(item.dueDate) && !item.isPaid && (
                               <Badge variant="destructive">Overdue</Badge>
                             )}
-                            {daysUntil(bill.dueDate) <= 3 && !bill.isPaid && !isOverdue(bill.dueDate) && (
+                            {daysUntil(item.dueDate) <= 3 && !item.isPaid && !isOverdue(item.dueDate) && (
                               <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">
                                 Soon
                               </Badge>
                             )}
-                            {bill.autoPay && (
+                            {item.autoPay && (
                               <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">
                                 Auto-Pay
                               </Badge>
@@ -367,25 +393,25 @@ export default function BillsPage() {
                             <div className="flex items-center gap-1">
                               <CalendarClock className="h-3 w-3" />
                               <span>
-                                {bill.isPaid
-                                  ? `Paid on ${formatDate(bill.paidDate || bill.dueDate)}`
-                                  : `Due ${formatDate(bill.dueDate)} (${daysUntil(bill.dueDate)})`}
+                                {item.isPaid
+                                  ? `Paid on ${formatDate(item.paidDate || item.dueDate)}`
+                                  : `Due ${formatDate(item.dueDate)} (${daysUntil(item.dueDate)})`}
                               </span>
                             </div>
                             <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              <span>{FREQUENCY_LABEL[bill.frequency] || bill.frequency}</span>
+                              <span>{FREQUENCY_LABEL[item.frequency] || item.frequency}</span>
                             </div>
                             <div className="flex items-center gap-1">
                               <BarChart3 className="h-3 w-3" />
-                              <span>{bill.category}</span>
+                              <span>{item.category}</span>
                             </div>
                           </div>
                         </div>
                         
                         <div className="flex items-center gap-2">
                           <div className="text-lg font-medium">
-                            {formatCurrency(bill.amount)}
+                            {formatCurrency(item.amount)}
                           </div>
                           
                           <DropdownMenu>
@@ -395,17 +421,17 @@ export default function BillsPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {!bill.isPaid && (
-                                <DropdownMenuItem onClick={() => handlePayBill(bill.id)}>
+                              {!item.isPaid && (
+                                <DropdownMenuItem onClick={() => handlePayBill(item.id)}>
                                   <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
                                   Mark as Paid
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuItem onClick={() => handleEditBill(bill)}>
+                              <DropdownMenuItem onClick={() => handleEditBill(item as Bill)}>
                                 <CalendarIcon className="h-4 w-4 mr-2 text-blue-500" />
                                 Edit Bill
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDeleteBill(bill.id)}>
+                              <DropdownMenuItem onClick={() => handleDeleteBill(item.id)}>
                                 <Wallet className="h-4 w-4 mr-2 text-red-500" />
                                 Delete Bill
                               </DropdownMenuItem>

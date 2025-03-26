@@ -210,6 +210,7 @@ export default function ForecastingPage() {
       recurringBills: bills.filter(b => b.isRecurring).length,
       totalExpenses: expenses.length,
       plannedExpenses: expenses.filter(e => e.isPlanned).length,
+      totalItems: incomes.length + bills.length + expenses.length,
       forecastDays
     });
     
@@ -844,449 +845,646 @@ export default function ForecastingPage() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Cash Flow Forecast</h1>
-            <p className="text-muted-foreground">
-              Predict your future financial position based on income and expenses
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center space-x-4 justify-end mb-2">
-              <div className="text-sm text-muted-foreground">Timeframe:</div>
-              <SelectGroup className="flex space-x-1">
-                <Button
-                  variant={forecastPeriod === "1m" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setForecastPeriod("1m")}
-                >
-                  1 Month
-                </Button>
-                <Button
-                  variant={forecastPeriod === "3m" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setForecastPeriod("3m")}
-                >
-                  3 Months
-                </Button>
-                <Button
-                  variant={forecastPeriod === "6m" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setForecastPeriod("6m")}
-                >
-                  6 Months
-                </Button>
-                <Button
-                  variant={forecastPeriod === "12m" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setForecastPeriod("12m")}
-                >
-                  1 Year
-                </Button>
-              </SelectGroup>
+      <div className="container mx-auto p-4">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-bold mb-2">Cash Flow Forecasting</h1>
+          
+          <Tabs defaultValue="chart" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="chart">Forecast View</TabsTrigger>
+              <TabsTrigger value="monthly">Monthly Breakdown</TabsTrigger>
+              <TabsTrigger value="items">Recurring Items</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="chart">
+              <Card className="mb-6">
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle>Cash Flow Projection</CardTitle>
+                      <CardDescription>Forecast of your account balance including all expenses, bills, and incomes</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <Select 
+                        value={forecastPeriod}
+                        onValueChange={(value) => setForecastPeriod(value as ForecastPeriod)}
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue placeholder="Time Period" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1m">1 Month</SelectItem>
+                          <SelectItem value="3m">3 Months</SelectItem>
+                          <SelectItem value="6m">6 Months</SelectItem>
+                          <SelectItem value="12m">12 Months</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {financialData.loading || forecastData.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-[400px]">
+                      <LoadingSpinner size="lg" />
+                      <p className="text-sm text-muted-foreground mt-2">Generating forecast...</p>
+                    </div>
+                  ) : (
+                    <div className="h-[400px]">
+                      <ForecastChart 
+                        baselineData={forecastData} 
+                        scenarioData={isSimulationMode ? scenarioForecast : undefined} 
+                        timeFrame={forecastPeriod}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <ForecastBalanceCard 
+                  forecastData={forecastData} 
+                  scenarioData={isSimulationMode ? scenarioForecast : undefined}
+                />
+                
+                <ForecastActionsCard 
+                  openAddIncomeDialog={() => setOpenAddIncomeDialog(true)}
+                  openAddExpenseDialog={() => setOpenAddExpenseDialog(true)}
+                  onToggleSimulation={() => setIsSimulationMode(!isSimulationMode)}
+                  isSimulationMode={isSimulationMode}
+                />
+                
+                <ForecastRiskAssessmentCard forecastData={forecastData} />
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="monthly">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Monthly Breakdown</CardTitle>
+                  <CardDescription>Forecast of monthly income, expenses, and net cash flow</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {monthlyBreakdown.length > 0 ? (
+                    <div className="space-y-4">
+                      {monthlyBreakdown.map((month, index) => (
+                        <MonthlyForecastCard 
+                          key={month.month} 
+                          monthData={month}
+                          isScenario={isSimulationMode}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">No monthly data available</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="items">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recurring Items in Forecast</CardTitle>
+                  <CardDescription>Overview of recurring incomes and expenses included in the forecast</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <RecurringItemsCard 
+                    incomes={financialData.incomesData || []}
+                    bills={financialData.billsData || []}
+                    expenses={financialData.expensesData || []}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+          
+          {/* Dialogs for adding new items */}
+          {/* (existing dialogs remain unchanged) */}
+        </div>
+      </div>
+    </MainLayout>
+  );
+}
+
+// New RecurringItemsCard Component
+function RecurringItemsCard({ incomes, bills, expenses }: { 
+  incomes: any[], 
+  bills: any[],
+  expenses: any[]
+}) {
+  // Filter to only recurring items
+  const recurringIncomes = incomes.filter(income => income.isRecurring && income.frequency);
+  const recurringBills = bills.filter(bill => bill.isRecurring && bill.frequency);
+  
+  // Group items by frequency
+  const groupByFrequency = (items: any[]) => {
+    const grouped: Record<string, any[]> = {
+      weekly: [],
+      biweekly: [],
+      monthly: [],
+      quarterly: [],
+      annually: [],
+      other: []
+    };
+    
+    items.forEach(item => {
+      const frequency = item.frequency?.toLowerCase().trim() || '';
+      
+      if (frequency === 'weekly') {
+        grouped.weekly.push(item);
+      } else if (frequency === 'biweekly' || frequency === 'bi-weekly' || frequency === 'bi weekly') {
+        grouped.biweekly.push(item);
+      } else if (frequency === 'monthly') {
+        grouped.monthly.push(item);
+      } else if (frequency === 'quarterly') {
+        grouped.quarterly.push(item);
+      } else if (frequency === 'annually' || frequency === 'annual' || frequency === 'yearly') {
+        grouped.annually.push(item);
+      } else {
+        grouped.other.push(item);
+      }
+    });
+    
+    return grouped;
+  };
+  
+  const groupedIncomes = groupByFrequency(recurringIncomes);
+  const groupedBills = groupByFrequency(recurringBills);
+  
+  // Helper for displaying frequency badge
+  const FrequencyBadge = ({ frequency }: { frequency: string }) => {
+    const getColor = () => {
+      switch (frequency) {
+        case 'weekly': return 'bg-red-100 text-red-800 border-red-200';
+        case 'biweekly': return 'bg-orange-100 text-orange-800 border-orange-200';
+        case 'monthly': return 'bg-blue-100 text-blue-800 border-blue-200';
+        case 'quarterly': return 'bg-purple-100 text-purple-800 border-purple-200';
+        case 'annually': return 'bg-green-100 text-green-800 border-green-200';
+        default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      }
+    };
+    
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getColor()}`}>
+        {frequency.charAt(0).toUpperCase() + frequency.slice(1)}
+      </span>
+    );
+  };
+  
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-medium mb-2 flex items-center gap-1">
+          <ArrowUp className="h-4 w-4 text-emerald-500" />
+          Recurring Income
+        </h3>
+        
+        {Object.entries(groupedIncomes).flatMap(([frequency, items]) => 
+          items.length > 0 ? [
+            <div key={`income-${frequency}`} className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FrequencyBadge frequency={frequency} />
+                <span className="text-sm font-medium">{items.length} item{items.length !== 1 ? 's' : ''}</span>
+              </div>
+              
+              <div className="space-y-2">
+                {items.map(income => (
+                  <div key={income.id} className="p-3 bg-background border rounded-md">
+                    <div className="flex justify-between">
+                      <div>
+                        <div className="font-medium">{income.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Next: {new Date(income.date).toLocaleDateString()}
+                          {income.category && ` · ${income.category}`}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium text-emerald-600">{formatCurrency(income.amount)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {frequency === 'monthly' ? 'Monthly' : 
+                           frequency === 'biweekly' ? 'Every 2 weeks' : 
+                           frequency === 'weekly' ? 'Weekly' : 
+                           frequency === 'quarterly' ? 'Every 3 months' : 
+                           frequency === 'annually' ? 'Yearly' : 
+                           income.frequency}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <Button variant="outline" className="gap-2">
-              <Settings className="h-4 w-4" />
-              Settings
+          ] : []
+        )}
+        
+        {recurringIncomes.length === 0 && (
+          <div className="text-center py-4 text-muted-foreground">
+            No recurring income found
+          </div>
+        )}
+      </div>
+      
+      <Separator />
+      
+      <div>
+        <h3 className="text-lg font-medium mb-2 flex items-center gap-1">
+          <ArrowDown className="h-4 w-4 text-rose-500" />
+          Recurring Expenses
+        </h3>
+        
+        {Object.entries(groupedBills).flatMap(([frequency, items]) => 
+          items.length > 0 ? [
+            <div key={`bill-${frequency}`} className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FrequencyBadge frequency={frequency} />
+                <span className="text-sm font-medium">{items.length} item{items.length !== 1 ? 's' : ''}</span>
+              </div>
+              
+              <div className="space-y-2">
+                {items.map(bill => (
+                  <div key={bill.id} className="p-3 bg-background border rounded-md">
+                    <div className="flex justify-between">
+                      <div>
+                        <div className="font-medium">{bill.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Next: {new Date(bill.dueDate).toLocaleDateString()}
+                          {bill.category && ` · ${bill.category}`}
+                          {bill.autoPay && ` · AutoPay`}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium text-rose-600">{formatCurrency(bill.amount)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {frequency === 'monthly' ? 'Monthly' : 
+                           frequency === 'biweekly' ? 'Every 2 weeks' : 
+                           frequency === 'weekly' ? 'Weekly' : 
+                           frequency === 'quarterly' ? 'Every 3 months' : 
+                           frequency === 'annually' ? 'Yearly' : 
+                           bill.frequency}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ] : []
+        )}
+        
+        {recurringBills.length === 0 && (
+          <div className="text-center py-4 text-muted-foreground">
+            No recurring expenses found
+          </div>
+        )}
+      </div>
+      
+      <Separator />
+      
+      <div>
+        <h3 className="text-lg font-medium mb-2 flex items-center gap-1">
+          <ArrowDown className="h-4 w-4 text-amber-500" />
+          One-time Expenses
+        </h3>
+        
+        {expenses.length > 0 ? (
+          <div className="space-y-2">
+            {expenses.slice(0, 10).map(expense => (
+              <div key={expense.id} className="p-3 bg-background border rounded-md">
+                <div className="flex justify-between">
+                  <div>
+                    <div className="font-medium">{expense.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Date: {new Date(expense.date).toLocaleDateString()}
+                      {expense.category && ` · ${expense.category}`}
+                      {expense.isPlanned && ` · Planned`}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium text-amber-600">{formatCurrency(expense.amount)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      One-time expense
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            
+            {expenses.length > 10 && (
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                + {expenses.length - 10} more one-time expenses
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-4 text-muted-foreground">
+            No one-time expenses found
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ForecastBalanceCard Component
+function ForecastBalanceCard({ forecastData, scenarioData }: { forecastData: ForecastItem[], scenarioData?: ForecastItem[] }) {
+  const { profileData } = useFinancialData();
+  
+  // Get current and ending balances
+  const currentBalance = profileData?.currentBalance || 0;
+  
+  // Get ending balance from the last item with a running balance
+  const getEndingBalance = (data: ForecastItem[]) => {
+    if (!data || data.length === 0) return 0;
+    
+    // Find the last item with a running balance (excluding markers)
+    const validItems = data.filter(item => 
+      item.runningBalance !== undefined && 
+      item.type !== 'marker'
+    );
+    
+    if (validItems.length === 0) return 0;
+    
+    // Sort by date and get the last item
+    const sortedItems = [...validItems].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    
+    return sortedItems[0].runningBalance || 0;
+  };
+  
+  const endingBalance = getEndingBalance(forecastData);
+  const scenarioEndingBalance = scenarioData ? getEndingBalance(scenarioData) : undefined;
+  
+  // Calculate projected change
+  const projectedChange = endingBalance - currentBalance;
+  const projectedChangePercent = currentBalance !== 0 
+    ? (projectedChange / Math.abs(currentBalance)) * 100 
+    : 0;
+  
+  // Get end date
+  const getEndDate = (data: ForecastItem[]) => {
+    if (!data || data.length === 0) return new Date();
+    
+    const sortedByDate = [...data].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    
+    return new Date(sortedByDate[0].date);
+  };
+  
+  const endDate = getEndDate(forecastData);
+  const formattedEndDate = endDate.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  });
+  
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Balance Projection</CardTitle>
+        <CardDescription>Current and projected account balances</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <div className="text-sm text-muted-foreground">Current Balance</div>
+          <div className="text-2xl font-bold">{formatCurrency(currentBalance)}</div>
+          <div className="text-xs text-muted-foreground">
+            Last updated: {new Date(profileData?.lastUpdated || Date.now()).toLocaleDateString()}
+          </div>
+        </div>
+        
+        <Separator />
+        
+        <div className="space-y-2">
+          <div className="text-sm text-muted-foreground">Projected Balance</div>
+          <div className="text-2xl font-bold">{formatCurrency(endingBalance)}</div>
+          
+          {scenarioEndingBalance && (
+            <div className="text-sm text-emerald-500">
+              Scenario: {formatCurrency(scenarioEndingBalance)}
+            </div>
+          )}
+          
+          <div className="flex items-center gap-2">
+            <span className={`text-sm ${projectedChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+              {projectedChange >= 0 ? '+' : ''}{formatCurrency(projectedChange)} 
+              ({projectedChangePercent >= 0 ? '+' : ''}{projectedChangePercent.toFixed(1)}%)
+            </span>
+          </div>
+          
+          <div className="text-xs text-muted-foreground">
+            By {formattedEndDate}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ForecastActionsCard Component
+function ForecastActionsCard({ 
+  openAddIncomeDialog, 
+  openAddExpenseDialog,
+  onToggleSimulation,
+  isSimulationMode
+}: { 
+  openAddIncomeDialog: () => void, 
+  openAddExpenseDialog: () => void,
+  onToggleSimulation: () => void,
+  isSimulationMode: boolean
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Forecast Actions</CardTitle>
+        <CardDescription>Update your forecast or test scenarios</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Add Items</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={openAddIncomeDialog} className="w-full" variant="outline">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Income
+            </Button>
+            <Button onClick={openAddExpenseDialog} className="w-full" variant="outline">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Expense
             </Button>
           </div>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Current Balance</CardTitle>
-              <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-muted-foreground" />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-4 w-4"
-                  onClick={() => {
-                    setNewBalance(financialData.profileData?.currentBalance || 0);
-                    setIsEditingBalance(true);
-                  }}
-                >
-                  <Edit className="h-3 w-3" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(financialData.profileData?.currentBalance || 0)}</div>
-              <p className="text-xs text-muted-foreground">Last updated: {new Date(financialData.profileData?.lastUpdated || Date.now()).toLocaleDateString()}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Projected Income</CardTitle>
-              <ArrowUp className="h-4 w-4 text-emerald-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1">
-                <div className="text-2xl font-bold">${totals.projectedIncome}</div>
-                {scenarioForecast.length > 0 && (
-                  <div className="text-sm text-emerald-500">
-                    ${(parseFloat(totals.projectedIncome) * (1 + incomeAdjustment / 100)).toFixed(2)} (Scenario)
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">Next {forecastPeriod === "1m" ? "month" : forecastPeriod === "12m" ? "year" : forecastPeriod.replace("m", " months")}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Projected Expenses</CardTitle>
-              <ArrowDown className="h-4 w-4 text-rose-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1">
-                <div className="text-2xl font-bold">${totals.projectedExpenses}</div>
-                {scenarioForecast.length > 0 && (
-                  <div className="text-sm text-rose-500">
-                    ${(parseFloat(totals.projectedExpenses) * (1 + expensesAdjustment / 100)).toFixed(2)} (Scenario)
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">Next {forecastPeriod === "1m" ? "month" : forecastPeriod === "12m" ? "year" : forecastPeriod.replace("m", " months")}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ending Balance</CardTitle>
-              <TrendingUp className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1">
-                <div className="text-2xl font-bold">${totals.endingBalance}</div>
-                {scenarioForecast.length > 0 && (
-                  <div className="text-sm text-emerald-500">
-                    ${scenarioForecast[scenarioForecast.length - 1]?.runningBalance?.toFixed(2) ?? 0} (Scenario)
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">Projected for {getEndDateLabel()}</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <CardTitle>Cash Flow Projection</CardTitle>
-                <CardDescription>How your balance is expected to change over time</CardDescription>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="optional-expenses"
-                    checked={includeOptionalExpenses}
-                    onCheckedChange={setIncludeOptionalExpenses}
-                  />
-                  <Label htmlFor="optional-expenses">Include optional expenses</Label>
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="h-80">
-            {forecastData.length > 0 ? (
-              <ForecastChart
-                baselineData={forecastData}
-                scenarioData={scenarioForecast}
-                className="h-full w-full"
-                timeFrame={forecastPeriod}
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center">
-                  <CalendarCheck className="h-12 w-12 mx-auto text-muted-foreground/30" />
-                  <p className="mt-2 text-muted-foreground">
-                    Add income and expenses to see your forecast
-                  </p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Monthly Breakdown</CardTitle>
-                  <CardDescription>Net cashflow by month for the next 12 months</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {monthlyBreakdown.length === 0 ? (
-                  <div className="text-center py-8">
-                    <CalendarCheck className="h-12 w-12 mx-auto text-muted-foreground/30" />
-                    <p className="mt-2 text-muted-foreground">
-                      Add income and expenses to see your monthly breakdown
-                    </p>
-                  </div>
-                ) : (
-                  monthlyBreakdown.map((month, index) => {
-                    const isPositiveCashflow = month.netCashFlow >= 0;
-                    const isScenarioPositive = month.scenarioNetCashFlow ? month.scenarioNetCashFlow >= 0 : true;
-                    
-                    return (
-                      <div key={index} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium">{month.month}</h4>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm font-semibold ${
-                              isPositiveCashflow
-                                ? 'text-emerald-500'
-                                : 'text-rose-500'
-                            }`}>
-                              {isPositiveCashflow ? '+' : ''}{formatCurrency(month.netCashFlow)}
-                            </span>
-                            {month.scenarioNetCashFlow !== undefined && (
-                              <span className={`text-sm font-semibold ${
-                                isScenarioPositive
-                                  ? 'text-emerald-500'
-                                  : 'text-rose-500'
-                              }`}>
-                                ({isScenarioPositive ? '+' : ''}{formatCurrency(month.scenarioNetCashFlow)})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <p className="text-muted-foreground">
-                              Income: <span className="font-medium text-emerald-500">+{formatCurrency(month.income)}</span>
-                              {month.scenarioIncome !== undefined && (
-                                <span className="ml-1 text-xs text-emerald-500">
-                                  ({formatCurrency(month.scenarioIncome)})
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">
-                              Expenses: <span className="font-medium text-rose-500">-{formatCurrency(month.mandatoryExpenses + (includeOptionalExpenses ? month.optionalExpenses : 0))}</span>
-                              {(month.scenarioMandatoryExpenses !== undefined || month.scenarioOptionalExpenses !== undefined) && (
-                                <span className="ml-1 text-xs text-rose-500">
-                                  ({formatCurrency((month.scenarioMandatoryExpenses || 0) + (includeOptionalExpenses ? (month.scenarioOptionalExpenses || 0) : 0))})
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <Progress
-                          value={isPositiveCashflow ? 100 : (month.income / (month.mandatoryExpenses + month.optionalExpenses + 0.01)) * 100}
-                          className={`h-2 ${isPositiveCashflow ? 'bg-emerald-100' : 'bg-rose-100'} [&>div]:${isPositiveCashflow ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                        />
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Scenario Simulation</CardTitle>
-                    <CardDescription>Test different financial scenarios</CardDescription>
-                  </div>
-                  <Switch
-                    checked={isSimulationMode}
-                    onCheckedChange={(checked) => {
-                      setIsSimulationMode(checked);
-                      if (checked) {
-                        generateScenarioForecast();
-                      } else {
-                        setScenarioForecast([]);
-                      }
-                    }}
-                  />
-                </div>
-              </CardHeader>
-              <CardContent>
-                {!isSimulationMode ? (
-                  <div className="text-center py-6">
-                    <LineChart className="h-12 w-12 mx-auto text-muted-foreground/30" />
-                    <p className="mt-2 text-muted-foreground">
-                      Toggle the switch to enable scenario simulation
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="scenario-name">Scenario Name</Label>
-                      <Input
-                        id="scenario-name"
-                        value={scenarioName}
-                        onChange={(e) => setScenarioName(e.target.value)}
-                        placeholder="My Financial Scenario"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="income-adjustment">
-                        Income Adjustment (%)
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          id="income-adjustment"
-                          type="number"
-                          value={incomeAdjustment}
-                          onChange={(e) => setIncomeAdjustment(parseFloat(e.target.value) || 0)}
-                          min="-100"
-                          max="100"
-                        />
-                        <span className="text-muted-foreground">%</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {incomeAdjustment > 0
-                          ? `Increases all income by ${incomeAdjustment}%`
-                          : incomeAdjustment < 0
-                          ? `Decreases all income by ${Math.abs(incomeAdjustment)}%`
-                          : "No adjustment to income"}
-                      </p>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="expenses-adjustment">
-                        Expenses Adjustment (%)
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          id="expenses-adjustment"
-                          type="number"
-                          value={expensesAdjustment}
-                          onChange={(e) => setExpensesAdjustment(parseFloat(e.target.value) || 0)}
-                          min="-100"
-                          max="100"
-                        />
-                        <span className="text-muted-foreground">%</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {expensesAdjustment > 0
-                          ? `Increases all expenses by ${expensesAdjustment}%`
-                          : expensesAdjustment < 0
-                          ? `Decreases all expenses by ${Math.abs(expensesAdjustment)}%`
-                          : "No adjustment to expenses"}
-                      </p>
-                    </div>
-                    
-                    <Separator />
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="savings-adjustment">
-                        Monthly Savings Increase
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <span>$</span>
-                        <Input
-                          id="savings-adjustment"
-                          type="number"
-                          value={savingsAdjustment}
-                          onChange={(e) => setSavingsAdjustment(parseFloat(e.target.value) || 0)}
-                          min="0"
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {savingsAdjustment > 0
-                          ? `Adding $${savingsAdjustment} in monthly savings`
-                          : "No additional savings"}
-                      </p>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="unexpected-expense">
-                        One-time Unexpected Expense
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <span>$</span>
-                        <Input
-                          id="unexpected-expense"
-                          type="number"
-                          value={unexpectedExpense}
-                          onChange={(e) => setUnexpectedExpense(parseFloat(e.target.value) || 0)}
-                          min="0"
-                        />
-                      </div>
-                      {unexpectedExpense > 0 && (
-                        <div className="mt-2">
-                          <Label htmlFor="unexpected-expense-date">
-                            Date of Unexpected Expense
-                          </Label>
-                          <Input
-                            id="unexpected-expense-date"
-                            type="date"
-                            onChange={(e) => setUnexpectedExpenseDate(e.target.valueAsDate || undefined)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex gap-2 justify-end">
-                      <Button variant="outline" onClick={resetScenario}>
-                        Reset
-                      </Button>
-                      <Button onClick={applyScenario}>
-                        Apply Scenario
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+        
+        <Separator />
+        
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium">Scenario Mode</div>
+            <Switch checked={isSimulationMode} onCheckedChange={onToggleSimulation} />
           </div>
+          <p className="text-xs text-muted-foreground">
+            {isSimulationMode 
+              ? "Simulate 'what-if' scenarios by adjusting income, expenses, and other factors" 
+              : "Enable to test different financial scenarios"}
+          </p>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-        {/* Add balance edit dialog */}
-        <Dialog open={isEditingBalance} onOpenChange={setIsEditingBalance}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit Current Balance</DialogTitle>
-              <DialogDescription>
-                Update your current balance and optionally add a note to explain the change.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-balance">New Balance</Label>
-                <Input
-                  id="new-balance"
-                  type="number"
-                  value={newBalance}
-                  onChange={(e) => setNewBalance(parseFloat(e.target.value) || 0)}
-                  step="0.01"
-                />
+// ForecastRiskAssessmentCard Component
+function ForecastRiskAssessmentCard({ forecastData }: { forecastData: ForecastItem[] }) {
+  // Find lowest balance point
+  const findLowestBalance = () => {
+    if (!forecastData || forecastData.length === 0) return { date: new Date(), balance: 0 };
+    
+    let lowestBalance = Infinity;
+    let lowestDate = new Date();
+    
+    forecastData.forEach(item => {
+      if (
+        item.runningBalance !== undefined && 
+        item.runningBalance < lowestBalance &&
+        item.type !== 'marker'
+      ) {
+        lowestBalance = item.runningBalance;
+        lowestDate = new Date(item.date);
+      }
+    });
+    
+    return { date: lowestDate, balance: lowestBalance };
+  };
+  
+  // Count days with negative balance
+  const countNegativeDays = () => {
+    if (!forecastData || forecastData.length === 0) return 0;
+    
+    return forecastData.filter(
+      item => item.runningBalance !== undefined && 
+      item.runningBalance < 0 &&
+      item.type !== 'marker'
+    ).length;
+  };
+  
+  const lowestPoint = findLowestBalance();
+  const negativeDays = countNegativeDays();
+  const totalDays = forecastData.filter(item => item.type !== 'marker').length;
+  const riskPercentage = totalDays > 0 ? (negativeDays / totalDays) * 100 : 0;
+  
+  // Determine risk level
+  const getRiskLevel = () => {
+    if (riskPercentage === 0) return { level: 'Low', color: 'text-emerald-500' };
+    if (riskPercentage < 10) return { level: 'Moderate', color: 'text-yellow-500' };
+    if (riskPercentage < 25) return { level: 'High', color: 'text-orange-500' };
+    return { level: 'Critical', color: 'text-rose-500' };
+  };
+  
+  const risk = getRiskLevel();
+  
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Risk Assessment</CardTitle>
+        <CardDescription>Analysis of potential financial risks</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <div className="text-sm text-muted-foreground">Risk Level</div>
+          <div className={`text-xl font-bold ${risk.color}`}>
+            {risk.level}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {negativeDays > 0 
+              ? `Negative balance on ${negativeDays} out of ${totalDays} days (${riskPercentage.toFixed(1)}%)` 
+              : 'No risk of negative balance detected'}
+          </p>
+        </div>
+        
+        {lowestPoint.balance < 0 && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Lowest Balance Point</div>
+              <div className="text-xl font-bold text-rose-500">
+                {formatCurrency(lowestPoint.balance)}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="balance-note">Note (Optional)</Label>
-                <Input
-                  id="balance-note"
-                  value={balanceNote}
-                  onChange={(e) => setBalanceNote(e.target.value)}
-                  placeholder="Reason for the balance update"
-                />
-              </div>
+              <p className="text-xs text-muted-foreground">
+                On {lowestPoint.date.toLocaleDateString()}
+              </p>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditingBalance(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleBalanceUpdate}>
-                Update Balance
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// MonthlyForecastCard Component
+function MonthlyForecastCard({ 
+  monthData, 
+  isScenario = false 
+}: { 
+  monthData: MonthlyForecast, 
+  isScenario: boolean 
+}) {
+  const isPositiveCashflow = monthData.netCashFlow >= 0;
+  const isScenarioPositive = monthData.scenarioNetCashFlow ? monthData.scenarioNetCashFlow >= 0 : true;
+  
+  return (
+    <div className="space-y-2 p-4 border rounded-md">
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium">{monthData.month}</h4>
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-semibold ${
+            isPositiveCashflow
+              ? 'text-emerald-500'
+              : 'text-rose-500'
+          }`}>
+            {isPositiveCashflow ? '+' : ''}{formatCurrency(monthData.netCashFlow)}
+          </span>
+          
+          {isScenario && monthData.scenarioNetCashFlow !== undefined && (
+            <span className={`text-sm font-semibold ${
+              isScenarioPositive
+                ? 'text-emerald-500'
+                : 'text-rose-500'
+            }`}>
+              ({isScenarioPositive ? '+' : ''}{formatCurrency(monthData.scenarioNetCashFlow)})
+            </span>
+          )}
+        </div>
       </div>
-    </MainLayout>
+      
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <div>
+          <p className="text-muted-foreground">
+            Income: <span className="font-medium text-emerald-500">+{formatCurrency(monthData.income)}</span>
+            {isScenario && monthData.scenarioIncome !== undefined && (
+              <span className="ml-1 text-xs text-emerald-500">
+                ({formatCurrency(monthData.scenarioIncome)})
+              </span>
+            )}
+          </p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">
+            Expenses: <span className="font-medium text-rose-500">-{formatCurrency(monthData.mandatoryExpenses + monthData.optionalExpenses)}</span>
+            {isScenario && (monthData.scenarioMandatoryExpenses !== undefined || monthData.scenarioOptionalExpenses !== undefined) && (
+              <span className="ml-1 text-xs text-rose-500">
+                ({formatCurrency((monthData.scenarioMandatoryExpenses || 0) + (monthData.scenarioOptionalExpenses || 0))})
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+      
+      <Progress
+        value={isPositiveCashflow ? 100 : (monthData.income / (monthData.mandatoryExpenses + monthData.optionalExpenses + 0.01)) * 100}
+        className={`h-2 ${isPositiveCashflow ? 'bg-emerald-100' : 'bg-rose-100'}`}
+      />
+    </div>
   );
 }

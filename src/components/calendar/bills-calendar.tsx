@@ -18,21 +18,60 @@ interface BillsCalendarProps {
   onExpenseClick?: (expense: Expense) => void;
 }
 
+// Combined type for bills and expenses
+interface CalendarItem {
+  id: string;
+  name: string;
+  amount: number;
+  category: string;
+  isExpense?: boolean;
+  isPaid?: boolean;
+  date?: string;
+  dueDate?: string;
+}
+
 export function BillsCalendar({ bills, expenses, onBillClick, onExpenseClick }: BillsCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+
+  // Helper function to safely get a date
+  const getItemDate = (item: CalendarItem): Date => {
+    if (item.dueDate) return new Date(item.dueDate);
+    if (item.date) return new Date(item.date);
+    return new Date(); // Fallback
+  };
 
   // Function to combine bills and expenses for a given day
   const getDayItems = (day: Date) => {
     const billsOnDay = bills.filter(bill => isSameDay(new Date(bill.dueDate), day));
     const expensesOnDay = expenses.filter(expense => isSameDay(new Date(expense.date), day));
     
+    // Convert expenses to bill-like format for display
+    const expensesAsBills: CalendarItem[] = expensesOnDay.map(expense => ({
+      id: expense.id,
+      name: expense.name,
+      amount: expense.amount,
+      category: expense.category,
+      isExpense: true,
+      date: expense.date,
+      isPaid: true
+    }));
+    
+    // Combine both for display
+    const allItems: CalendarItem[] = [
+      ...billsOnDay.map(bill => ({...bill, isExpense: false})), 
+      ...expensesAsBills
+    ];
+    
     return {
       bills: billsOnDay,
       expenses: expensesOnDay,
+      allItems,
       total: billsOnDay.length + expensesOnDay.length,
       amountDue: billsOnDay.reduce((sum, bill) => sum + bill.amount, 0),
-      amountSpent: expensesOnDay.reduce((sum, expense) => sum + expense.amount, 0)
+      amountSpent: expensesOnDay.reduce((sum, expense) => sum + expense.amount, 0),
+      totalAmount: billsOnDay.reduce((sum, bill) => sum + bill.amount, 0) + 
+                  expensesOnDay.reduce((sum, expense) => sum + expense.amount, 0)
     };
   };
 
@@ -102,64 +141,54 @@ export function BillsCalendar({ bills, expenses, onBillClick, onExpenseClick }: 
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-2">{format(selectedDate, "MMMM d, yyyy")}</h3>
             <div className="space-y-4">
-              {getDayItems(selectedDate).bills.length > 0 && (
+              {getDayItems(selectedDate).allItems.length > 0 ? (
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium flex items-center">
-                    <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
-                    Bills Due
+                    <DollarSign className="h-4 w-4 mr-2 text-blue-500" />
+                    Bills & Expenses
                   </h4>
                   <div className="space-y-2">
-                    {getDayItems(selectedDate).bills.map((bill) => (
+                    {getDayItems(selectedDate).allItems.map((item) => (
                       <div 
-                        key={bill.id} 
+                        key={item.id} 
                         className={cn(
                           "p-3 rounded-md border flex justify-between items-center cursor-pointer hover:bg-accent",
-                          bill.isPaid ? "bg-green-50 dark:bg-green-900/10 border-green-200" : 
-                          isEqual(new Date(bill.dueDate), new Date()) || new Date(bill.dueDate) < new Date() 
-                            ? "bg-red-50 dark:bg-red-900/10 border-red-200" 
-                            : "bg-blue-50 dark:bg-blue-900/10 border-blue-200"
+                          item.isExpense 
+                            ? "bg-green-50 dark:bg-green-900/10 border-green-200" 
+                            : item.isPaid 
+                              ? "bg-green-50 dark:bg-green-900/10 border-green-200" 
+                              : isEqual(getItemDate(item), new Date()) || 
+                                getItemDate(item) < new Date() 
+                                ? "bg-red-50 dark:bg-red-900/10 border-red-200" 
+                                : "bg-blue-50 dark:bg-blue-900/10 border-blue-200"
                         )}
-                        onClick={() => onBillClick && onBillClick(bill)}
+                        onClick={() => {
+                          if (item.isExpense) {
+                            // Find the original expense object
+                            const expense = expenses.find(e => e.id === item.id);
+                            if (expense && onExpenseClick) onExpenseClick(expense);
+                          } else {
+                            // This is a bill
+                            if (onBillClick) onBillClick(item as Bill);
+                          }
+                        }}
                       >
                         <div>
-                          <div className="font-medium">{bill.name}</div>
-                          <div className="text-sm text-muted-foreground">{bill.category}</div>
+                          <div className="font-medium">{item.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {item.category}
+                            {item.isExpense && <span className="ml-2 text-green-600">(Expense)</span>}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="font-semibold">{formatCurrency(bill.amount)}</div>
-                          {bill.isPaid && <CheckCircle className="h-4 w-4 text-green-500" />}
+                          <div className="font-semibold">{formatCurrency(item.amount)}</div>
+                          {item.isPaid && <CheckCircle className="h-4 w-4 text-green-500" />}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
-
-              {getDayItems(selectedDate).expenses.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2 text-green-500" />
-                    Expenses
-                  </h4>
-                  <div className="space-y-2">
-                    {getDayItems(selectedDate).expenses.map((expense) => (
-                      <div 
-                        key={expense.id} 
-                        className="p-3 rounded-md border bg-green-50 dark:bg-green-900/10 border-green-200 flex justify-between items-center cursor-pointer hover:bg-accent"
-                        onClick={() => onExpenseClick && onExpenseClick(expense)}
-                      >
-                        <div>
-                          <div className="font-medium">{expense.name}</div>
-                          <div className="text-sm text-muted-foreground">{expense.category}</div>
-                        </div>
-                        <div className="font-semibold">{formatCurrency(expense.amount)}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {getDayItems(selectedDate).total === 0 && (
+              ) : (
                 <p className="text-muted-foreground text-center py-4">
                   No bills or expenses for this day
                 </p>

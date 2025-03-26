@@ -13,11 +13,23 @@ export function calculateNextOccurrence(startDate: string, frequency: string): s
       return date.toISOString();
     }
 
+    // Normalize frequency to ensure consistent handling
+    let normalizedFrequency = frequency.toLowerCase().trim();
+    
+    // Handle variant spellings of biweekly
+    if (normalizedFrequency === 'bi-weekly' || normalizedFrequency === 'bi weekly') {
+      normalizedFrequency = 'biweekly';
+    }
+    
+    // Log for debugging frequency issues
+    console.log(`Calculating next occurrence after ${date.toLocaleDateString()} with frequency '${normalizedFrequency}'`);
+
     // Calculate the next occurrence based on frequency
     let nextDate = new Date(date);
     
     // Prevention: If date is invalid, reset to today
     if (isNaN(nextDate.getTime())) {
+      console.warn(`Invalid date detected in calculateNextOccurrence: ${startDate}, using today instead`);
       return new Date().toISOString();
     }
     
@@ -27,7 +39,10 @@ export function calculateNextOccurrence(startDate: string, frequency: string): s
     
     // If date is very old, fast forward to reduce recursion
     if (nextDate < twoYearsAgo) {
-      switch (frequency) {
+      // Log that we're fast-forwarding
+      console.log(`Date ${date.toLocaleDateString()} is > 2 years old, fast-forwarding to near current date`);
+      
+      switch (normalizedFrequency) {
         case 'daily':
           nextDate = new Date(now);
           nextDate.setDate(nextDate.getDate() - 1);
@@ -57,18 +72,21 @@ export function calculateNextOccurrence(startDate: string, frequency: string): s
           nextDate.setFullYear(nextDate.getFullYear() - 1);
           break;
         default:
+          console.warn(`Unknown frequency '${normalizedFrequency}', defaulting to today`);
           return now.toISOString();
       }
     }
     
-    switch (frequency) {
+    // Apply the frequency increment
+    const originalDate = new Date(nextDate);
+    switch (normalizedFrequency) {
       case 'daily':
         nextDate.setDate(nextDate.getDate() + 1);
         break;
       case 'weekly':
         nextDate.setDate(nextDate.getDate() + 7);
         break;
-      case 'biweekly':
+      case 'biweekly': // Ensure this is exactly 14 days
         nextDate.setDate(nextDate.getDate() + 14);
         break;
       case 'monthly':
@@ -84,19 +102,27 @@ export function calculateNextOccurrence(startDate: string, frequency: string): s
         nextDate.setFullYear(nextDate.getFullYear() + 1);
         break;
       default:
-        // If no recurrence, return the original date
+        // If no recognized recurrence, return the original date
+        console.warn(`Unrecognized frequency: '${normalizedFrequency}', returning original date`);
         return date.toISOString();
     }
 
     // If the calculated date is still in the past, recursively calculate the next one
-    // Limit recursion depth to prevent stack overflow
+    // using iterative approach to prevent stack overflow
     if (nextDate <= now) {
+      // Log that we're fast-forwarding
+      console.log(`Calculated date ${nextDate.toLocaleDateString()} is still in the past, fast-forwarding`);
+      
       // Fast forward algorithm to reduce recursion depth
       let iterations = 0;
-      while (nextDate <= now && iterations < 100) {
+      const maxIterations = 100; // Safety limit
+      
+      while (nextDate <= now && iterations < maxIterations) {
         iterations++;
         
-        switch (frequency) {
+        const previousDate = new Date(nextDate);
+        
+        switch (normalizedFrequency) {
           case 'daily':
             nextDate.setDate(nextDate.getDate() + 1);
             break;
@@ -119,14 +145,29 @@ export function calculateNextOccurrence(startDate: string, frequency: string): s
             nextDate.setFullYear(nextDate.getFullYear() + 1);
             break;
         }
+        
+        // Debug every few iterations
+        if (iterations <= 2 || iterations % 10 === 0 || iterations >= maxIterations - 1) {
+          console.log(`Fast-forward iteration ${iterations}: ${previousDate.toLocaleDateString()} -> ${nextDate.toLocaleDateString()}`);
+        }
+      }
+      
+      // If we hit the iteration limit, log a warning
+      if (iterations >= maxIterations) {
+        console.warn(`Hit maximum iterations (${maxIterations}) when calculating next occurrence for frequency '${normalizedFrequency}'`);
       }
       
       // If we still couldn't get a future date, just return tomorrow
       if (nextDate <= now) {
+        console.warn(`Failed to find future date after ${maxIterations} iterations, defaulting to tomorrow`);
         nextDate = new Date();
         nextDate.setDate(nextDate.getDate() + 1);
       }
     }
+    
+    // Log the result
+    const dayDiff = Math.round((nextDate.getTime() - originalDate.getTime()) / (1000 * 60 * 60 * 24));
+    console.log(`Next occurrence calculated: ${originalDate.toLocaleDateString()} -> ${nextDate.toLocaleDateString()} (${dayDiff} days, frequency: '${normalizedFrequency}')`);
     
     return nextDate.toISOString();
   } catch (error) {
@@ -160,6 +201,16 @@ export function generateOccurrences<T extends { id: string; frequency: string; a
       }];
     }
 
+    // Log for debugging frequency issues
+    console.log(`Generating occurrences for item ${item.id} with frequency '${item.frequency}' and ${(item as any).name || 'unnamed'}`);
+    
+    // Ensure frequency is correctly normalized
+    // This helps ensure case consistency and handling for 'bi-weekly' vs 'biweekly' variations
+    let normalizedFrequency = item.frequency.toLowerCase().trim();
+    if (normalizedFrequency === 'bi-weekly' || normalizedFrequency === 'bi weekly') {
+      normalizedFrequency = 'biweekly';
+    }
+    
     const occurrences: ForecastItem[] = [];
     
     // More reasonable limit for occurrences based on forecast length
@@ -175,32 +226,66 @@ export function generateOccurrences<T extends { id: string; frequency: string; a
     let currentDate = new Date(item[dateField] as string);
     if (currentDate < startDate) {
       // If the original date is in the past, calculate the next occurrence from today
-      currentDate = new Date(calculateNextOccurrence(startDate.toISOString(), item.frequency));
+      currentDate = new Date(calculateNextOccurrence(startDate.toISOString(), normalizedFrequency));
+      console.log(`Item ${(item as any).name || item.id} starting from calculated next date: ${currentDate.toLocaleDateString()}`);
     }
     
     // Generate occurrences until we reach the end date
     let count = 0;
+    let lastDate: Date | null = null;
+    
     while (currentDate <= endDate && count < MAX_OCCURRENCES) {
+      // Add occurrence to the list
       occurrences.push({
         itemId: item.id,
         date: currentDate.toISOString(),
         amount: item.amount,
         category: (item as any).category || 'unknown',
         name: (item as any).name || 'Unnamed Item',
-        type: item.amount >= 0 ? 'income' : 'expense'
+        type: item.amount >= 0 ? 'income' : 'expense',
+        // Add frequency to description for clarity in forecast displays
+        description: `${(item as any).name || 'Item'} (${normalizedFrequency})`
       });
       
-      // Calculate the next occurrence based on the frequency
-      const nextDate = new Date(calculateNextOccurrence(currentDate.toISOString(), item.frequency));
+      // Log gap between occurrences if we have more than one
+      if (lastDate) {
+        const daysBetween = Math.round((currentDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+        if ((normalizedFrequency === 'biweekly' && daysBetween !== 14) || 
+            (normalizedFrequency === 'weekly' && daysBetween !== 7)) {
+          console.warn(`Warning: '${normalizedFrequency}' item ${(item as any).name || item.id} has ${daysBetween} days between occurrences, expected ${normalizedFrequency === 'biweekly' ? 14 : 7}`);
+        }
+      }
+      
+      lastDate = new Date(currentDate);
+      
+      // Calculate the next occurrence based on the frequency - use normalized frequency
+      const nextDate = new Date(calculateNextOccurrence(currentDate.toISOString(), normalizedFrequency));
       
       // Prevent infinite loop in case calculateNextOccurrence returns same date
       if (nextDate.getTime() === currentDate.getTime()) {
         console.warn(`Preventing infinite loop in generateOccurrences: next date equals current date for item ${item.id}`);
-        nextDate.setDate(nextDate.getDate() + 1);
+        nextDate.setDate(nextDate.getDate() + (normalizedFrequency === 'biweekly' ? 14 : 
+                                              normalizedFrequency === 'weekly' ? 7 : 1));
+      }
+      
+      // Log the interval
+      const dayInterval = Math.round((nextDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (count < 2 || count % 5 === 0) { // Only log a subset to avoid console spam
+        console.log(`Occurrence ${count+1} for ${(item as any).name || item.id}: ${currentDate.toLocaleDateString()} -> ${nextDate.toLocaleDateString()} (${dayInterval} days)`);
       }
       
       currentDate = nextDate;
       count++;
+    }
+    
+    // Log summary
+    console.log(`Generated ${occurrences.length} occurrences for ${(item as any).name || item.id} with frequency '${normalizedFrequency}'`);
+    if (occurrences.length > 1) {
+      const firstDate = new Date(occurrences[0].date);
+      const lastOccurrence = new Date(occurrences[occurrences.length - 1].date);
+      const totalDays = Math.round((lastOccurrence.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+      const avgInterval = totalDays / (occurrences.length - 1);
+      console.log(`Average interval: ${avgInterval.toFixed(1)} days for '${normalizedFrequency}' frequency`);
     }
     
     // If we didn't generate any occurrences but should have, add at least one
@@ -212,7 +297,8 @@ export function generateOccurrences<T extends { id: string; frequency: string; a
         amount: item.amount,
         category: (item as any).category || 'unknown',
         name: (item as any).name || 'Unnamed Item',
-        type: item.amount >= 0 ? 'income' : 'expense'
+        type: item.amount >= 0 ? 'income' : 'expense',
+        description: `${(item as any).name || 'Item'} (${normalizedFrequency})`
       });
     }
     
@@ -374,25 +460,42 @@ export function generateCashFlowForecast(
       if (income.amount === 0) return null;
       
       try {
+        // Log the income being processed for debugging
+        console.log(`Processing income: ${income.name}, Amount: ${income.amount}, Frequency: ${income.frequency}, Recurring: ${income.isRecurring}`);
+        
+        // Normalize the frequency
+        let normalizedFrequency = income.frequency?.toLowerCase().trim() || 'once';
+        if (normalizedFrequency === 'bi-weekly' || normalizedFrequency === 'bi weekly') {
+          normalizedFrequency = 'biweekly';
+          console.log(`Normalized income frequency from ${income.frequency} to 'biweekly'`);
+        }
+        
         // For recurring items in short forecasts, only generate if they occur in the period
-        if (income.isRecurring && income.frequency && !isShortForecast) {
+        if (income.isRecurring && normalizedFrequency && normalizedFrequency !== 'once' && !isShortForecast) {
+          // Create a copy with normalized frequency
+          const normalizedIncome = {
+            ...income,
+            id: income.id,
+            frequency: normalizedFrequency,
+            amount: income.amount
+          };
+          
+          console.log(`Generating recurring income occurrences for ${income.name} with frequency '${normalizedFrequency}'`);
+          
           return generateOccurrences(
-            {
-              ...income,
-              id: income.id,
-              frequency: income.frequency,
-              amount: income.amount
-            },
+            normalizedIncome,
             'date',
             normalizedDays
           );
-        } else if (income.isRecurring && income.frequency && isShortForecast) {
+        } else if (income.isRecurring && normalizedFrequency && normalizedFrequency !== 'once' && isShortForecast) {
           // For short forecasts, only include if the next occurrence is within the forecast period
-          const nextDate = new Date(calculateNextOccurrence(income.date, income.frequency));
+          const nextDate = new Date(calculateNextOccurrence(income.date, normalizedFrequency));
           const forecastEndDate = new Date();
           forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
           
           if (nextDate <= forecastEndDate) {
+            console.log(`Adding single occurrence for short forecast income ${income.name} on ${nextDate.toLocaleDateString()}`);
+            
             return {
               itemId: income.id,
               date: nextDate.toISOString(),
@@ -401,7 +504,7 @@ export function generateCashFlowForecast(
               name: income.name || 'Income',
               type: 'income',
               runningBalance: 0, // Will be calculated later
-              description: `${income.name} (${income.category}) - Next occurrence`
+              description: `${income.name} (${income.category}) - Next occurrence (${normalizedFrequency})`
             };
           }
           return null;
@@ -414,6 +517,8 @@ export function generateCashFlowForecast(
         forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
         
         if (itemDate >= currentDate && itemDate <= forecastEndDate) {
+          console.log(`Adding non-recurring income ${income.name} on ${itemDate.toLocaleDateString()}`);
+          
           return {
             itemId: income.id,
             date: income.date,
@@ -422,11 +527,11 @@ export function generateCashFlowForecast(
             name: income.name || 'Income',
             type: 'income',
             runningBalance: 0, // Will be calculated later
-            description: `${income.name} (${income.category})`
+            description: `${income.name} (${income.category}) - One-time`
           };
         }
       } catch (error) {
-        console.error("Error processing income item:", error);
+        console.error(`Error processing income item ${income.name || income.id}:`, error);
       }
       return null;
     }, 'income');
@@ -439,87 +544,115 @@ export function generateCashFlowForecast(
       // Only process valid bill items
       if (!bill.id || !bill.dueDate || isNaN(bill.amount)) return null;
       
-      // For recurring bills in short forecasts, only generate if they occur in the period
-      if (bill.isRecurring && bill.frequency && !isShortForecast) {
-        return generateOccurrences(
-          {
+      try {
+        // Log the bill being processed for debugging
+        console.log(`Processing bill: ${bill.name}, Amount: ${bill.amount}, Frequency: ${bill.frequency}, Recurring: ${bill.isRecurring}`);
+        
+        // Normalize the frequency
+        let normalizedFrequency = bill.frequency?.toLowerCase().trim() || 'once';
+        if (normalizedFrequency === 'bi-weekly' || normalizedFrequency === 'bi weekly') {
+          normalizedFrequency = 'biweekly';
+          console.log(`Normalized bill frequency from ${bill.frequency} to 'biweekly'`);
+        }
+        
+        // For recurring bills in short forecasts, only generate if they occur in the period
+        if (bill.isRecurring && normalizedFrequency && normalizedFrequency !== 'once' && !isShortForecast) {
+          // Create a copy with normalized frequency
+          const normalizedBill = {
             ...bill,
             id: bill.id,
-            frequency: bill.frequency,
+            frequency: normalizedFrequency,
             amount: -Math.abs(bill.amount),
             date: bill.dueDate
-          },
-          'date',
-          normalizedDays
-        ).map(item => ({
-          ...item,
-          type: 'bill',
-          description: `${bill.name} (${bill.category}) - Due${bill.autoPay ? ' - AutoPay' : ''}`
-        }));
-      } else if (bill.isRecurring && bill.frequency && isShortForecast) {
-        // For short forecasts, only include if the next occurrence is within the forecast period
-        const nextDate = new Date(calculateNextOccurrence(bill.dueDate, bill.frequency));
+          };
+          
+          console.log(`Generating recurring bill occurrences for ${bill.name} with frequency '${normalizedFrequency}'`);
+          
+          return generateOccurrences(
+            normalizedBill,
+            'date',
+            normalizedDays
+          ).map(item => ({
+            ...item,
+            type: 'bill',
+            description: `${bill.name} (${bill.category}) - Due${bill.autoPay ? ' - AutoPay' : ''} (${normalizedFrequency})`
+          }));
+        } else if (bill.isRecurring && normalizedFrequency && normalizedFrequency !== 'once' && isShortForecast) {
+          // For short forecasts, only include if the next occurrence is within the forecast period
+          const nextDate = new Date(calculateNextOccurrence(bill.dueDate, normalizedFrequency));
+          const forecastEndDate = new Date();
+          forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
+          
+          if (nextDate <= forecastEndDate) {
+            console.log(`Adding single occurrence for short forecast bill ${bill.name} on ${nextDate.toLocaleDateString()}`);
+            
+            return {
+              itemId: bill.id,
+              date: nextDate.toISOString(),
+              amount: -Math.abs(bill.amount),
+              category: bill.category || 'Expense',
+              name: bill.name || 'Bill',
+              type: 'bill',
+              runningBalance: 0, // Will be calculated later
+              description: `${bill.name} (${bill.category}) - Due${bill.autoPay ? ' - AutoPay' : ''} (${normalizedFrequency})`
+            };
+          }
+          return null;
+        }
+        
+        // For non-recurring bills, just add the single occurrence if within forecast period
+        const dueDate = new Date(bill.dueDate);
+        const currentDate = new Date();
         const forecastEndDate = new Date();
         forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
         
-        if (nextDate <= forecastEndDate) {
+        if (dueDate >= currentDate && dueDate <= forecastEndDate) {
+          console.log(`Adding non-recurring bill ${bill.name} on ${dueDate.toLocaleDateString()}`);
+          
           return {
             itemId: bill.id,
-            date: nextDate.toISOString(),
-            amount: -Math.abs(bill.amount),
+            date: bill.dueDate,
+            amount: -Math.abs(bill.amount), // Ensure bills are negative
             category: bill.category || 'Expense',
             name: bill.name || 'Bill',
             type: 'bill',
             runningBalance: 0, // Will be calculated later
-            description: `${bill.name} (${bill.category}) - Due${bill.autoPay ? ' - AutoPay' : ''}`
+            description: `${bill.name} (${bill.category}) - Due${bill.autoPay ? ' - AutoPay' : ''} - One-time`
           };
         }
-        return null;
-      }
-      
-      // For non-recurring bills, just add the single occurrence if within forecast period
-      const dueDate = new Date(bill.dueDate);
-      const currentDate = new Date();
-      const forecastEndDate = new Date();
-      forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
-      
-      if (dueDate >= currentDate && dueDate <= forecastEndDate) {
-        return {
-          itemId: bill.id,
-          date: bill.dueDate,
-          amount: -Math.abs(bill.amount), // Ensure bills are negative
-          category: bill.category || 'Expense',
-          name: bill.name || 'Bill',
-          type: 'bill',
-          runningBalance: 0, // Will be calculated later
-          description: `${bill.name} (${bill.category}) - Due${bill.autoPay ? ' - AutoPay' : ''}`
-        };
+      } catch (error) {
+        console.error(`Error processing bill item ${bill.name || bill.id}:`, error);
       }
       return null;
     }, 'bill');
 
-    // Process expenses with date filtering
+    // Process expenses as one-time bills (always include in forecast regardless of date)
     safelyAddItems(validExpenses, (expense) => {
       // Only process valid expense items
       if (!expense.id || !expense.date || isNaN(expense.amount)) return null;
       
-      // Only include expenses if they are within the forecast period
-      const expenseDate = new Date(expense.date);
-      const currentDate = new Date();
-      const forecastEndDate = new Date();
-      forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
-      
-      if (expenseDate >= currentDate && expenseDate <= forecastEndDate) {
+      try {
+        // Log the expense being processed for debugging
+        console.log(`Processing expense: ${expense.name}, Amount: ${expense.amount}, Treating as one-time bill`);
+        
+        const expenseDate = new Date(expense.date);
+        
+        // Always include the expense in the forecast
+        console.log(`Adding expense ${expense.name} on ${expenseDate.toLocaleDateString()}`);
+        
+        // Create an expense item that matches the bill format
         return {
           itemId: expense.id,
           date: expense.date,
           amount: -Math.abs(expense.amount), // Ensure expenses are negative
           category: expense.category || 'Expense',
           name: expense.name || 'Expense',
-          type: 'expense',
+          type: 'bill', // Treat as bill for consistent handling
           runningBalance: 0, // Will be calculated later
-          description: `${expense.name} (${expense.category})${expense.isPlanned ? ' - Planned' : ' - Unplanned'}`
+          description: `${expense.name} (${expense.category}) - One-time expense`
         };
+      } catch (error) {
+        console.error(`Error processing expense item ${expense.name || expense.id}:`, error);
       }
       return null;
     }, 'expense');
