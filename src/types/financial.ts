@@ -80,7 +80,7 @@ export interface ForecastItem {
   amount: number;
   category: string;
   name: string;
-  type: 'income' | 'bill' | 'expense' | 'balance' | 'adjustment';
+  type: 'income' | 'bill' | 'expense' | 'balance' | 'adjustment' | 'marker';
   runningBalance?: number;
   description?: string;
   transactions?: {
