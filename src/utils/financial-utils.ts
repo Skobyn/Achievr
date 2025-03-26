@@ -162,8 +162,9 @@ export function generateOccurrences<T extends { id: string; frequency: string; a
 
     const occurrences: ForecastItem[] = [];
     
-    // Limit maximum number of occurrences to prevent memory issues
-    const MAX_OCCURRENCES = 100;
+    // More reasonable limit for occurrences based on forecast length
+    // Longer forecast periods should allow more occurrences
+    const MAX_OCCURRENCES = Math.min(days, 365);
     
     // Set end date to now + days for the forecast period
     const startDate = new Date();
@@ -190,8 +191,29 @@ export function generateOccurrences<T extends { id: string; frequency: string; a
       });
       
       // Calculate the next occurrence based on the frequency
-      currentDate = new Date(calculateNextOccurrence(currentDate.toISOString(), item.frequency));
+      const nextDate = new Date(calculateNextOccurrence(currentDate.toISOString(), item.frequency));
+      
+      // Prevent infinite loop in case calculateNextOccurrence returns same date
+      if (nextDate.getTime() === currentDate.getTime()) {
+        console.warn(`Preventing infinite loop in generateOccurrences: next date equals current date for item ${item.id}`);
+        nextDate.setDate(nextDate.getDate() + 1);
+      }
+      
+      currentDate = nextDate;
       count++;
+    }
+    
+    // If we didn't generate any occurrences but should have, add at least one
+    if (occurrences.length === 0 && startDate <= endDate) {
+      console.warn(`No occurrences generated for item ${item.id}, adding one at forecast start`);
+      occurrences.push({
+        itemId: item.id,
+        date: startDate.toISOString(),
+        amount: item.amount,
+        category: (item as any).category || 'unknown',
+        name: (item as any).name || 'Unnamed Item',
+        type: item.amount >= 0 ? 'income' : 'expense'
+      });
     }
     
     return occurrences;
@@ -222,13 +244,13 @@ export function generateCashFlowForecast(
     const normalizedDays = (!days || isNaN(days) || days <= 0) ? 90 : Math.min(days, MAX_FORECAST_DAYS);
     
     // Ensure arrays are valid and limit their size to prevent processing too much
-    // More aggressive limits for longer forecast periods
-    const MAX_ITEMS = normalizedDays <= 30 ? 100 : 50;
+    // More balanced limits to ensure we have enough data for accurate forecasting
+    const MAX_ITEMS = Math.min(normalizedDays * 2, 200); // Scale with forecast length, up to 200
     
     const validIncomes = Array.isArray(incomes) ? incomes.slice(0, MAX_ITEMS) : [];
     const validBills = Array.isArray(bills) ? bills.slice(0, MAX_ITEMS) : [];
     const validExpenses = Array.isArray(expenses) ? expenses.slice(0, MAX_ITEMS) : [];
-    const validAdjustments = Array.isArray(balanceAdjustments) ? balanceAdjustments.slice(0, 25) : [];
+    const validAdjustments = Array.isArray(balanceAdjustments) ? balanceAdjustments.slice(0, 50) : [];
     
     console.log('Generating forecast with:', {
       balance: normalizedBalance,
@@ -251,8 +273,46 @@ export function generateCashFlowForecast(
       description: 'Starting balance'
     }];
     
-    // Memory guard: cap total forecast items
-    const MAX_FORECAST_ITEMS = normalizedDays <= 30 ? 500 : 1000;
+    // Memory guard: cap total forecast items but ensure we have enough data points
+    // Scale with forecast period - longer periods need more points
+    const MAX_FORECAST_ITEMS = Math.min(normalizedDays * 10, 2000); // Scale with period length
+    
+    // Add some future data points to ensure the forecast extends properly
+    // This ensures we have at least some data points spread across the forecast period
+    if (normalizedDays > 1) {
+      // Add data points at regular intervals to ensure forecast visually extends to the end date
+      const forecastEndDate = new Date();
+      forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
+      
+      // Add mid-point and end-point markers (even if they're empty)
+      // This ensures the chart extends visually to the forecast end date
+      if (normalizedDays > 30) {
+        const midPoint = new Date();
+        midPoint.setDate(midPoint.getDate() + Math.floor(normalizedDays / 2));
+        
+        forecast.push({
+          itemId: 'mid-point-marker',
+          date: midPoint.toISOString(),
+          amount: 0,
+          category: 'marker',
+          name: 'Forecast Mid-point',
+          type: 'marker',
+          runningBalance: normalizedBalance, // Will be recalculated
+          description: 'Forecast mid-point marker'
+        });
+      }
+      
+      forecast.push({
+        itemId: 'end-point-marker',
+        date: forecastEndDate.toISOString(),
+        amount: 0,
+        category: 'marker',
+        name: 'Forecast End',
+        type: 'marker',
+        runningBalance: normalizedBalance, // Will be recalculated
+        description: 'Forecast end date marker'
+      });
+    }
     
     // Function to safely add items to forecast
     const safelyAddItems = (

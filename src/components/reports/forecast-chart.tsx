@@ -13,6 +13,9 @@ interface ForecastChartProps {
 export function ForecastChart({ baselineData, scenarioData, className, timeFrame = "3m" }: ForecastChartProps) {
   // Process data based on timeFrame to create aggregated data points
   const processedData = useMemo(() => {
+    // Log for debugging
+    console.log(`ForecastChart processing data: ${baselineData.length} items, timeFrame: ${timeFrame}`);
+    
     if (!baselineData.length) return [];
 
     // Safety check for extremely large datasets
@@ -24,41 +27,47 @@ export function ForecastChart({ baselineData, scenarioData, className, timeFrame
     const sortedData = [...baselineData].sort((a, b) => 
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
-
-    // Determine the interval based on timeFrame and data size
-    let interval = 1; // days
-    if (timeFrame === "1m") interval = 1; // daily for 1 month
-    else if (timeFrame === "3m") interval = 7; // weekly for 3 months
-    else if (timeFrame === "6m") interval = 14; // bi-weekly for 6 months
-    else if (timeFrame === "12m") interval = 30; // monthly for 1 year
-
-    // For very large datasets, increase the interval to reduce data points
-    if (baselineData.length > 1000) {
-      interval = Math.max(interval, Math.ceil(baselineData.length / 100));
+    
+    // Log the date range
+    if (sortedData.length > 0) {
+      const firstDate = new Date(sortedData[0].date);
+      const lastDate = new Date(sortedData[sortedData.length - 1].date);
+      console.log(`Date range: ${firstDate.toISOString()} to ${lastDate.toISOString()}`);
+      console.log(`Total days in forecast: ${Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24))}`);
     }
 
-    // Create period boundaries with limited number of periods
-    const maxPeriods = 20; // Maximum number of data points to show
+    // Determine the interval based on timeFrame and data size
+    // Use smaller intervals to show more detail
+    let interval = 1; // days
+    if (timeFrame === "1m") interval = 1; // daily for 1 month
+    else if (timeFrame === "3m") interval = 3; // every 3 days for 3 months
+    else if (timeFrame === "6m") interval = 7; // weekly for 6 months
+    else if (timeFrame === "12m") interval = 14; // bi-weekly for 1 year
+
+    // Ensure we have at least 10 data points regardless of interval
     const startDate = new Date(sortedData[0].date);
     const endDate = new Date(sortedData[sortedData.length - 1].date);
     const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
     
-    // Adjust interval if we would have too many periods
-    if (totalDays / interval > maxPeriods) {
-      interval = Math.ceil(totalDays / maxPeriods);
-    }
+    // Adjust interval to ensure at least 10 data points but not more than 30
+    const targetDataPoints = Math.min(Math.max(totalDays / interval, 10), 30);
+    interval = Math.max(1, Math.ceil(totalDays / targetDataPoints));
+    
+    console.log(`Using interval of ${interval} days to create approximately ${totalDays / interval} data points`);
 
     // Group data into periods
     const periods: { start: Date, end: Date, label: string }[] = [];
     let currentDate = new Date(startDate);
     
+    // Ensure we create enough periods to cover the entire forecast
     while (currentDate <= endDate) {
       const periodStart = new Date(currentDate);
       const periodEnd = new Date(currentDate);
       periodEnd.setDate(periodEnd.getDate() + interval - 1);
       
+      // More descriptive labels 
       const label = timeFrame === "12m" 
-        ? `${currentDate.toLocaleDateString('en-US', { month: 'short' })}` 
+        ? `${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` 
         : `${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
       
       periods.push({ 
@@ -70,6 +79,46 @@ export function ForecastChart({ baselineData, scenarioData, className, timeFrame
       // Move to next period
       currentDate.setDate(currentDate.getDate() + interval);
     }
+    
+    // If we don't have enough periods, add some evenly spaced points
+    if (periods.length < 5 && totalDays > 5) {
+      console.log("Not enough periods, adding more data points");
+      
+      // Clear existing periods
+      periods.length = 0;
+      
+      // Create evenly spaced periods
+      const pointCount = Math.min(totalDays, 10);
+      const dayStep = totalDays / pointCount;
+      
+      for (let i = 0; i < pointCount; i++) {
+        const pointDate = new Date(startDate);
+        pointDate.setDate(pointDate.getDate() + Math.round(i * dayStep));
+        
+        // Ensure the point date doesn't exceed the end date
+        if (pointDate <= endDate) {
+          const periodStart = new Date(pointDate);
+          const periodEnd = new Date(pointDate);
+          
+          // For the last point, use the exact end date
+          if (i === pointCount - 1) {
+            periodEnd.setTime(endDate.getTime());
+          } else {
+            periodEnd.setDate(periodEnd.getDate() + Math.round(dayStep) - 1);
+          }
+          
+          const label = pointDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          
+          periods.push({ 
+            start: periodStart, 
+            end: periodEnd, 
+            label
+          });
+        }
+      }
+    }
+    
+    console.log(`Created ${periods.length} periods for chart display`);
     
     // Initialize period data with map for better performance
     const groupedData: Record<string, any> = {};
@@ -125,13 +174,61 @@ export function ForecastChart({ baselineData, scenarioData, className, timeFrame
     // Convert to array and ensure running balance continuity
     const result = Object.values(groupedData);
     
-    // Fill in missing running balances with the previous value
-    let lastBalance = baselineData[0]?.runningBalance || 0;
+    // Sort result by date for consistent display
+    result.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    // Fill in missing running balances with the previous value and ensure continuity
+    let lastBalance = sortedData.length > 0 
+      ? (sortedData[0].runningBalance || sortedData[0].amount || 0)
+      : 0;
+      
     for (let i = 0; i < result.length; i++) {
+      // For periods with no transactions, look for the latest available balance
       if (result[i].runningBalance === null) {
+        // Find the latest balance before this period
+        const periodStart = result[i].periodStart;
+        
+        // Find transactions on or before this period
+        const relevantTransactions = sortedData.filter(item => 
+          new Date(item.date) <= periodStart && 
+          item.runningBalance !== undefined
+        );
+        
+        if (relevantTransactions.length > 0) {
+          // Sort to get the most recent one
+          relevantTransactions.sort((a, b) => 
+            new Date(b.date).getTime() - new Date(a.date).getTime()
+          );
+          lastBalance = relevantTransactions[0].runningBalance || lastBalance;
+        }
+        
         result[i].runningBalance = lastBalance;
       } else {
         lastBalance = result[i].runningBalance;
+      }
+    }
+    
+    // Ensure we have a complete continuous line by adding interpolated points if needed
+    // This is crucial for proper display of forecast trends
+    if (result.length > 1) {
+      // Check for large balance jumps that might indicate missing data points
+      for (let i = 1; i < result.length; i++) {
+        const prevBalance = result[i-1].runningBalance || 0;
+        const currBalance = result[i].runningBalance || 0;
+        
+        // Calculate the change percentage
+        const changeAmount = Math.abs(currBalance - prevBalance);
+        const changePercent = prevBalance !== 0 
+          ? (changeAmount / Math.abs(prevBalance)) * 100 
+          : 0;
+        
+        // If there's a large jump, add an annotation
+        if (changePercent >
+          50 && changeAmount > 1000) {
+          result[i].significantChange = true;
+          result[i].changePct = changePercent.toFixed(0) + '%';
+          result[i].changeAmount = formatCurrency(changeAmount);
+        }
       }
     }
     

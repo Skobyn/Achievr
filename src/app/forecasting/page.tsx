@@ -214,60 +214,67 @@ export default function ForecastingPage() {
     });
     
     try {
-      // Generate baseline forecast with performance guardrails
-      setForecastData([]); // Clear existing data to free memory
+      // Always clear existing data first to prevent stale data display
+      setForecastData([]);
+      setScenarioForecast([]);
       
-      // Generate forecast with batch processing if period is long
-      let forecast: ForecastItem[];
-      
-      // Use a different approach based on forecast period length
-      if (forecastDays <= 30) {
-        // For short forecasts, process everything at once
-        forecast = generateCashFlowForecast(
-          currentBalance.currentBalance,
-          incomes,
-          bills,
-          expenses,
-          balanceAdjustments,
-          forecastDays
-        );
-      } else {
-        // For longer forecasts, handle with care
-        forecast = generateCashFlowForecast(
-          currentBalance.currentBalance,
-          incomes,
-          bills,
-          expenses,
-          balanceAdjustments,
-          forecastDays
-        );
+      // Generate forecast with the selected period
+      const forecast = generateCashFlowForecast(
+        currentBalance.currentBalance,
+        incomes,
+        bills,
+        expenses,
+        balanceAdjustments,
+        forecastDays
+      );
         
-        // Limit the number of items if we have too many
-        if (forecast.length > 1000) {
-          console.warn(`Limiting forecast from ${forecast.length} to 1000 items for performance`);
-          // Keep first and last items, then sample in between
-          const first = forecast.slice(0, 1);
-          const last = forecast.slice(-100);
-          const middle = forecast.slice(1, -100);
+      // Check if the forecast was generated properly
+      if (!forecast || forecast.length === 0) {
+        console.error("No forecast data was generated");
+        return;
+      }
+      
+      // Ensure we have a proper date range by examining the data
+      const sortedByDate = [...forecast].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+      
+      if (sortedByDate.length > 0) {
+        const firstDate = new Date(sortedByDate[0].date);
+        const lastDate = new Date(sortedByDate[sortedByDate.length - 1].date);
+        const dayRange = Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        console.log(`Generated forecast spans ${dayRange} days, from ${firstDate.toLocaleDateString()} to ${lastDate.toLocaleDateString()}`);
+        
+        // If the forecast doesn't span the expected number of days, add marker points
+        if (dayRange < forecastDays * 0.9) { // Allow for a 10% margin of error
+          console.warn(`Forecast doesn't span full period (${dayRange} vs ${forecastDays} days), adding end marker`);
           
-          // Sample middle items at regular intervals
-          const sampledMiddle = [];
-          const sampleInterval = Math.ceil(middle.length / 898);
-          for (let i = 0; i < middle.length; i += sampleInterval) {
-            sampledMiddle.push(middle[i]);
-          }
+          // Add a marker at the end date
+          const endDate = new Date();
+          endDate.setDate(endDate.getDate() + forecastDays);
           
-          forecast = [...first, ...sampledMiddle, ...last];
+          sortedByDate.push({
+            itemId: 'end-marker',
+            date: endDate.toISOString(),
+            amount: 0,
+            category: 'marker',
+            name: 'End of Forecast Period',
+            type: 'marker',
+            runningBalance: sortedByDate[sortedByDate.length - 1].runningBalance,
+            description: 'End of forecast period marker'
+          });
         }
       }
 
-      setForecastData(forecast);
+      // Use the sorted data to ensure timeline consistency
+      setForecastData(sortedByDate);
 
       // Log resulting forecast size
-      console.log(`Generated ${forecast.length} forecast items`);
+      console.log(`Generated ${sortedByDate.length} forecast items`);
 
       // Generate monthly breakdown from forecast data
-      const monthlyData = generateMonthlyBreakdown(forecast, scenarioForecast);
+      const monthlyData = generateMonthlyBreakdown(sortedByDate, scenarioForecast);
       setMonthlyBreakdown(monthlyData);
 
       // Generate scenario forecast if simulation mode is enabled
@@ -361,53 +368,57 @@ export default function ForecastingPage() {
         });
       }
       
-      // Use the same optimization approach as in the baseline forecast
-      let scenarioForecast: ForecastItem[];
-      setScenarioForecast([]); // Clear existing data to free memory
+      // Clear existing data before generating new scenario
+      setScenarioForecast([]);
       
-      if (forecastDays <= 30) {
-        // For short forecasts, process everything at once
-        scenarioForecast = generateCashFlowForecast(
-          currentBalance,
-          adjustedIncomes,
-          adjustedBills,
-          adjustedExpenses,
-          balanceAdjustments,
-          forecastDays
-        );
-      } else {
-        // Generate forecast with optimization for longer periods
-        scenarioForecast = generateCashFlowForecast(
-          currentBalance,
-          adjustedIncomes,
-          adjustedBills,
-          adjustedExpenses,
-          balanceAdjustments,
-          forecastDays
+      // Generate forecast with consistent approach
+      const scenarioForecast = generateCashFlowForecast(
+        currentBalance,
+        adjustedIncomes,
+        adjustedBills,
+        adjustedExpenses,
+        balanceAdjustments,
+        forecastDays
+      );
+      
+      // Ensure we have a good date span
+      if (scenarioForecast.length > 0) {
+        const sortedScenario = [...scenarioForecast].sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
         );
         
-        // Limit the number of items if we have too many
-        if (scenarioForecast.length > 1000) {
-          console.warn(`Limiting scenario forecast from ${scenarioForecast.length} to 1000 items`);
-          // Keep first and last items, then sample in between
-          const first = scenarioForecast.slice(0, 1);
-          const last = scenarioForecast.slice(-100);
-          const middle = scenarioForecast.slice(1, -100);
+        // Check if the forecast spans the whole period
+        const firstDate = new Date(sortedScenario[0].date);
+        const lastDate = new Date(sortedScenario[sortedScenario.length - 1].date);
+        const dayRange = Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        console.log(`Scenario forecast spans ${dayRange} days, from ${firstDate.toLocaleDateString()} to ${lastDate.toLocaleDateString()}`);
+        
+        // If forecast doesn't span the expected range, add an end marker
+        if (dayRange < forecastDays * 0.9) {
+          console.log(`Adding end marker to scenario forecast`);
           
-          // Sample middle items at regular intervals
-          const sampledMiddle = [];
-          const sampleInterval = Math.ceil(middle.length / 898);
-          for (let i = 0; i < middle.length; i += sampleInterval) {
-            sampledMiddle.push(middle[i]);
-          }
+          const endDate = new Date();
+          endDate.setDate(endDate.getDate() + forecastDays);
           
-          scenarioForecast = [...first, ...sampledMiddle, ...last];
+          sortedScenario.push({
+            itemId: 'scenario-end-marker',
+            date: endDate.toISOString(),
+            amount: 0,
+            category: 'marker',
+            name: 'End of Scenario Period',
+            type: 'marker',
+            runningBalance: sortedScenario[sortedScenario.length - 1].runningBalance,
+            description: 'End of scenario period marker'
+          });
         }
+        
+        setScenarioForecast(sortedScenario);
+        console.log(`Generated ${sortedScenario.length} scenario forecast items`);
+      } else {
+        console.warn("No scenario forecast data was generated");
+        setScenarioForecast([]);
       }
-      
-      setScenarioForecast(scenarioForecast);
-      console.log(`Generated ${scenarioForecast.length} scenario forecast items`);
-      
     } catch (error) {
       console.error("Error generating scenario forecast:", error);
       setScenarioForecast([]);
