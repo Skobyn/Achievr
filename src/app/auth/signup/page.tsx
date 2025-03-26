@@ -23,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { CircleDollarSign } from "lucide-react";
 
-import { useAuth } from "@/providers/firebase-auth-provider";
+import { useAuth } from "@/providers/supabase-auth-provider";
 
 // Form validation schema
 const formSchema = z
@@ -154,7 +154,7 @@ export default function SignUpPage() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input placeholder="••••••••" type="password" {...field} />
+                        <Input placeholder="••••••••" type="password" autoComplete="new-password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -167,7 +167,7 @@ export default function SignUpPage() {
                     <FormItem>
                       <FormLabel>Confirm Password</FormLabel>
                       <FormControl>
-                        <Input placeholder="••••••••" type="password" {...field} />
+                        <Input placeholder="••••••••" type="password" autoComplete="new-password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -23,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TrendingUp } from "lucide-react";
 
-import { useAuth } from "@/providers/firebase-auth-provider";
+import { useAuth } from "@/providers/supabase-auth-provider";
 
 // Form validation schema
 const formSchema = z.object({
@@ -146,7 +146,7 @@ export default function SignInPage() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input placeholder="••••••••" type="password" {...field} />
+                        <Input placeholder="••••••••" type="password" autoComplete="current-password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
