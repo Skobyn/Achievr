@@ -633,24 +633,30 @@ export function generateCashFlowForecast(
       
       try {
         // Log the expense being processed for debugging
-        console.log(`Processing expense: ${expense.name}, Amount: ${expense.amount}, Treating as one-time bill`);
+        console.log(`Processing expense: ${expense.name}, Amount: ${expense.amount}, Treating as one-time expense`);
         
         const expenseDate = new Date(expense.date);
+        const currentDate = new Date();
+        const forecastEndDate = new Date();
+        forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
         
-        // Always include the expense in the forecast
-        console.log(`Adding expense ${expense.name} on ${expenseDate.toLocaleDateString()}`);
-        
-        // Create an expense item that matches the bill format
-        return {
-          itemId: expense.id,
-          date: expense.date,
-          amount: -Math.abs(expense.amount), // Ensure expenses are negative
-          category: expense.category || 'Expense',
-          name: expense.name || 'Expense',
-          type: 'bill', // Treat as bill for consistent handling
-          runningBalance: 0, // Will be calculated later
-          description: `${expense.name} (${expense.category}) - One-time expense`
-        };
+        // Only include expenses within the forecast period or future expenses
+        if (expenseDate <= forecastEndDate) {
+          console.log(`Adding expense ${expense.name} on ${expenseDate.toLocaleDateString()}`);
+          
+          // Create an expense item with proper type
+          return {
+            itemId: expense.id,
+            date: expense.date,
+            amount: -Math.abs(expense.amount), // Ensure expenses are negative
+            category: expense.category || 'Expense',
+            name: expense.name || 'Expense',
+            type: 'expense', // Use 'expense' type instead of 'bill'
+            runningBalance: 0, // Will be calculated later
+            description: `${expense.name} (${expense.category}) - One-time expense`
+          };
+        }
+        return null;
       } catch (error) {
         console.error(`Error processing expense item ${expense.name || expense.id}:`, error);
       }
