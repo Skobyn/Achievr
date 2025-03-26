@@ -470,17 +470,26 @@ export function generateCashFlowForecast(
           console.log(`Normalized income frequency from ${income.frequency} to 'biweekly'`);
         }
         
+        const currentDate = new Date();
+        const forecastEndDate = new Date();
+        forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
+        const incomeDate = new Date(income.date);
+        
         // For recurring items in short forecasts, only generate if they occur in the period
         if (income.isRecurring && normalizedFrequency && normalizedFrequency !== 'once' && !isShortForecast) {
+          // Only generate occurrences starting from now or the most recent occurrence if in the past
+          const startDate = new Date(Math.max(currentDate.getTime(), incomeDate.getTime()));
+          
           // Create a copy with normalized frequency
           const normalizedIncome = {
             ...income,
             id: income.id,
             frequency: normalizedFrequency,
-            amount: income.amount
+            amount: income.amount,
+            date: startDate.toISOString() // Use current date as starting point for future occurrences
           };
           
-          console.log(`Generating recurring income occurrences for ${income.name} with frequency '${normalizedFrequency}'`);
+          console.log(`Generating recurring income occurrences for ${income.name} with frequency '${normalizedFrequency}' starting from ${startDate.toLocaleDateString()}`);
           
           return generateOccurrences(
             normalizedIncome,
@@ -489,9 +498,9 @@ export function generateCashFlowForecast(
           );
         } else if (income.isRecurring && normalizedFrequency && normalizedFrequency !== 'once' && isShortForecast) {
           // For short forecasts, only include if the next occurrence is within the forecast period
-          const nextDate = new Date(calculateNextOccurrence(income.date, normalizedFrequency));
-          const forecastEndDate = new Date();
-          forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
+          // If income date is in the past, calculate next occurrence from current date
+          const baseDate = incomeDate < currentDate ? currentDate : incomeDate;
+          const nextDate = new Date(calculateNextOccurrence(baseDate.toISOString(), normalizedFrequency));
           
           if (nextDate <= forecastEndDate) {
             console.log(`Adding single occurrence for short forecast income ${income.name} on ${nextDate.toLocaleDateString()}`);
@@ -511,13 +520,13 @@ export function generateCashFlowForecast(
         }
         
         // For non-recurring items, just add the single occurrence if within forecast period
-        const itemDate = new Date(income.date);
-        const currentDate = new Date();
-        const forecastEndDate = new Date();
-        forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
-        
-        if (itemDate >= currentDate && itemDate <= forecastEndDate) {
-          console.log(`Adding non-recurring income ${income.name} on ${itemDate.toLocaleDateString()}`);
+        // Only include future-dated items and very recent past items (last 7 days)
+        if (
+          (incomeDate >= currentDate && incomeDate <= forecastEndDate) || 
+          (incomeDate < currentDate && 
+           Math.abs(currentDate.getTime() - incomeDate.getTime()) < (7 * 24 * 60 * 60 * 1000))
+        ) {
+          console.log(`Adding non-recurring income ${income.name} on ${incomeDate.toLocaleDateString()}`);
           
           return {
             itemId: income.id,
@@ -530,6 +539,12 @@ export function generateCashFlowForecast(
             description: `${income.name} (${income.category}) - One-time`
           };
         }
+        
+        // Log skipped incomes for debugging
+        if (incomeDate < currentDate) {
+          console.log(`Skipping past income ${income.name} from ${incomeDate.toLocaleDateString()} (too old)`);
+        }
+        
       } catch (error) {
         console.error(`Error processing income item ${income.name || income.id}:`, error);
       }
@@ -555,18 +570,26 @@ export function generateCashFlowForecast(
           console.log(`Normalized bill frequency from ${bill.frequency} to 'biweekly'`);
         }
         
+        const currentDate = new Date();
+        const forecastEndDate = new Date();
+        forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
+        const dueDate = new Date(bill.dueDate);
+        
         // For recurring bills in short forecasts, only generate if they occur in the period
         if (bill.isRecurring && normalizedFrequency && normalizedFrequency !== 'once' && !isShortForecast) {
+          // Only generate occurrences starting from now or the most recent due date if in the past
+          const startDate = new Date(Math.max(currentDate.getTime(), dueDate.getTime()));
+          
           // Create a copy with normalized frequency
           const normalizedBill = {
             ...bill,
             id: bill.id,
             frequency: normalizedFrequency,
             amount: -Math.abs(bill.amount),
-            date: bill.dueDate
+            date: startDate.toISOString() // Use current/adjusted date as starting point for future occurrences
           };
           
-          console.log(`Generating recurring bill occurrences for ${bill.name} with frequency '${normalizedFrequency}'`);
+          console.log(`Generating recurring bill occurrences for ${bill.name} with frequency '${normalizedFrequency}' starting from ${startDate.toLocaleDateString()}`);
           
           return generateOccurrences(
             normalizedBill,
@@ -579,9 +602,9 @@ export function generateCashFlowForecast(
           }));
         } else if (bill.isRecurring && normalizedFrequency && normalizedFrequency !== 'once' && isShortForecast) {
           // For short forecasts, only include if the next occurrence is within the forecast period
-          const nextDate = new Date(calculateNextOccurrence(bill.dueDate, normalizedFrequency));
-          const forecastEndDate = new Date();
-          forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
+          // If bill due date is in the past, calculate next occurrence from current date
+          const baseDate = dueDate < currentDate ? currentDate : dueDate;
+          const nextDate = new Date(calculateNextOccurrence(baseDate.toISOString(), normalizedFrequency));
           
           if (nextDate <= forecastEndDate) {
             console.log(`Adding single occurrence for short forecast bill ${bill.name} on ${nextDate.toLocaleDateString()}`);
@@ -601,12 +624,12 @@ export function generateCashFlowForecast(
         }
         
         // For non-recurring bills, just add the single occurrence if within forecast period
-        const dueDate = new Date(bill.dueDate);
-        const currentDate = new Date();
-        const forecastEndDate = new Date();
-        forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
-        
-        if (dueDate >= currentDate && dueDate <= forecastEndDate) {
+        // Only include future bills and recently due bills (last 7 days)
+        if (
+          (dueDate >= currentDate && dueDate <= forecastEndDate) || 
+          (dueDate < currentDate && 
+           Math.abs(currentDate.getTime() - dueDate.getTime()) < (7 * 24 * 60 * 60 * 1000))
+        ) {
           console.log(`Adding non-recurring bill ${bill.name} on ${dueDate.toLocaleDateString()}`);
           
           return {
@@ -620,6 +643,13 @@ export function generateCashFlowForecast(
             description: `${bill.name} (${bill.category}) - Due${bill.autoPay ? ' - AutoPay' : ''} - One-time`
           };
         }
+        
+        // Log skipped bills for debugging
+        if (dueDate < currentDate) {
+          console.log(`Skipping past bill ${bill.name} from ${dueDate.toLocaleDateString()} (too old)`);
+        }
+        
+        return null;
       } catch (error) {
         console.error(`Error processing bill item ${bill.name || bill.id}:`, error);
       }
@@ -640,8 +670,15 @@ export function generateCashFlowForecast(
         const forecastEndDate = new Date();
         forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
         
-        // Only include expenses within the forecast period or future expenses
-        if (expenseDate <= forecastEndDate) {
+        // Only include expenses within the forecast period - but be stricter about dates
+        // We want expenses either in the future or recent past within forecast period
+        if (
+          // Include future expenses within forecast window
+          (expenseDate >= currentDate && expenseDate <= forecastEndDate) || 
+          // Include very recent past expenses (last 7 days) but not older ones to avoid inflation
+          (expenseDate < currentDate && 
+           Math.abs(currentDate.getTime() - expenseDate.getTime()) < (7 * 24 * 60 * 60 * 1000))
+        ) {
           console.log(`Adding expense ${expense.name} on ${expenseDate.toLocaleDateString()}`);
           
           // Create an expense item with proper type
@@ -656,6 +693,12 @@ export function generateCashFlowForecast(
             description: `${expense.name} (${expense.category}) - One-time expense`
           };
         }
+        
+        // Log skipped expenses for debugging
+        if (expenseDate < currentDate) {
+          console.log(`Skipping past expense ${expense.name} from ${expenseDate.toLocaleDateString()} (too old)`);
+        }
+        
         return null;
       } catch (error) {
         console.error(`Error processing expense item ${expense.name || expense.id}:`, error);

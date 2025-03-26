@@ -360,6 +360,24 @@ export default function ForecastingPage() {
       setForecastSummary(processedData.summary);
       setMonthlyBreakdown(processedData.monthlyBreakdown);
       
+      // Log detailed information about the generated forecast for debugging
+      console.log("Forecast Summary:", {
+        totalItems: forecast.length,
+        incomeItems: forecast.filter(item => item.type === 'income').length,
+        billItems: forecast.filter(item => item.type === 'bill').length,
+        expenseItems: forecast.filter(item => item.type === 'expense').length,
+        firstDate: forecast.length > 0 ? new Date(forecast[0].date).toLocaleDateString() : 'none',
+        lastDate: forecast.length > 0 ? new Date(forecast[forecast.length-1].date).toLocaleDateString() : 'none',
+        totalIncome: processedData.summary.projectedIncome,
+        totalExpenses: processedData.summary.projectedExpenses,
+        monthlyBreakdownCount: processedData.monthlyBreakdown.length,
+        runningBalanceRange: forecast.length > 0 ? 
+          `${formatCurrency(Math.min(...forecast.filter(i => i.runningBalance !== undefined).map(i => i.runningBalance || 0)))} to ${formatCurrency(Math.max(...forecast.filter(i => i.runningBalance !== undefined).map(i => i.runningBalance || 0)))}` : 'none'
+      });
+      
+      // Log all months included in the breakdown
+      console.log("Monthly Breakdown Months:", processedData.monthlyBreakdown.map(m => m.month));
+      
       // Update ref to prevent unnecessary recalculations
       lastGenerationRef.current = {
         balanceId,

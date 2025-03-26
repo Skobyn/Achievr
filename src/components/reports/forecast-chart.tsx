@@ -121,6 +121,37 @@ interface PeriodData {
 
 // Use React.memo to prevent unnecessary rerenders
 export const ForecastChart = React.memo(({ baselineData, scenarioData, className, timeFrame = "3m" }: ForecastChartProps) => {
+  // Add more detailed debugging at the start
+  console.log("ForecastChart render:", { 
+    baselineDataLength: baselineData.length,
+    scenarioDataLength: scenarioData?.length || 0,
+    timeFrame
+  });
+  
+  if (baselineData.length === 0) {
+    console.warn("ForecastChart received empty baselineData");
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center p-4">
+          <h3 className="font-medium text-gray-600">No forecast data available</h3>
+          <p className="text-sm text-gray-500 mt-1">Add income and expenses to see projections</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Show the date range of the input data
+  if (baselineData.length > 0) {
+    const dates = baselineData.map(item => new Date(item.date));
+    const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+    const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+    console.log("ForecastChart input date range:", { 
+      firstDate: minDate.toLocaleDateString(),
+      lastDate: maxDate.toLocaleDateString(),
+      daySpan: Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24))
+    });
+  }
+
   // Optimize the data processing with useMemo
   const processedData = useMemo(() => {
     if (!baselineData.length) return [];
@@ -330,8 +361,22 @@ export const ForecastChart = React.memo(({ baselineData, scenarioData, className
       }
     }
     
+    // Add debug logging for processed data
+    console.log("ForecastChart processed data:", {
+      periodsCreated: periods.length,
+      resultLength: result.length,
+      firstProcessedDate: result.length > 0 ? result[0].displayDate : 'none',
+      lastProcessedDate: result.length > 0 ? result[result.length - 1].displayDate : 'none'
+    });
+    
     return result;
   }, [baselineData, scenarioData, timeFrame]);
+  
+  // Add logging for the render phase
+  console.log("ForecastChart rendering with:", { 
+    processedDataLength: processedData.length,
+    hasScenario: !!scenarioData?.length
+  });
 
   return (
     <div className={className}>
