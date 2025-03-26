@@ -441,79 +441,119 @@ export default function ForecastingPage() {
         // Define which categories are optional expenses
         const optionalCategories = ['Entertainment', 'Personal', 'Dining', 'Shopping'];
         
-        // Process a maximum of 2000 items for performance
-        const processLimit = 2000;
-        const itemsToProcess = items.length > processLimit 
-          ? [...items.slice(0, 100), ...items.slice(-processLimit + 100)]
-          : items;
+        // Set a hard limit on items to process to prevent browser crashes
+        const MAX_ITEMS_TO_PROCESS = 500;
+        
+        // If we have more items than the limit, we'll sample them
+        let itemsToProcess: ForecastItem[];
+        
+        if (items.length > MAX_ITEMS_TO_PROCESS) {
+          console.warn(`Monthly breakdown processing limited from ${items.length} to ${MAX_ITEMS_TO_PROCESS} items`);
           
-        if (items.length > processLimit) {
-          console.warn(`Monthly breakdown processing limited from ${items.length} to ${processLimit} items`);
+          // Keep first month of data (approximately)
+          const firstMonthCutoff = new Date(items[0].date);
+          firstMonthCutoff.setMonth(firstMonthCutoff.getMonth() + 1);
+          
+          // Get items from first month (or at least 50 items)
+          const firstMonth = items.filter(item => new Date(item.date) < firstMonthCutoff).slice(0, 100);
+          
+          // For remaining periods, sample at regular intervals
+          const remainingItems = items.filter(item => new Date(item.date) >= firstMonthCutoff);
+          const samplingRate = Math.max(1, Math.floor(remainingItems.length / (MAX_ITEMS_TO_PROCESS - firstMonth.length)));
+          
+          const sampledItems = [];
+          for (let i = 0; i < remainingItems.length; i += samplingRate) {
+            sampledItems.push(remainingItems[i]);
+          }
+          
+          itemsToProcess = [...firstMonth, ...sampledItems];
+        } else {
+          itemsToProcess = items;
         }
         
-        // Process each item in the forecast
-        for (const item of itemsToProcess) {
-          try {
-            if (!item.date) continue;
-            
-            // Convert date to month key (YYYY-MM)
-            const date = new Date(item.date);
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            const monthLabel = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-            
-            // Create or update monthly data
-            if (!monthlyData.has(monthKey)) {
-              monthlyData.set(monthKey, {
-                month: monthLabel,
-                income: 0,
-                mandatoryExpenses: 0,
-                optionalExpenses: 0,
-                netCashFlow: 0,
-                scenarioIncome: 0,
-                scenarioMandatoryExpenses: 0,
-                scenarioOptionalExpenses: 0,
-                scenarioNetCashFlow: 0
-              });
-            }
-            
-            const monthData = monthlyData.get(monthKey)!;
-            
-            // Add to the appropriate category based on item type
-            if (item.type === 'income') {
-              if (isScenario) {
-                monthData.scenarioIncome = (monthData.scenarioIncome || 0) + item.amount;
-                monthData.scenarioNetCashFlow = (monthData.scenarioNetCashFlow || 0) + item.amount;
-              } else {
-                monthData.income += item.amount;
-                monthData.netCashFlow += item.amount;
-              }
-            } else if (item.type === 'expense' || item.type === 'bill') {
-              const expenseAmount = Math.abs(item.amount);
+        // Process in batches to prevent UI freezing
+        const batchSize = 100;
+        const totalBatches = Math.ceil(itemsToProcess.length / batchSize);
+        
+        // Process initial batch immediately
+        processBatch(0);
+        
+        // Function to process a batch of items
+        function processBatch(batchIndex: number) {
+          if (batchIndex >= totalBatches) return;
+          
+          const startIdx = batchIndex * batchSize;
+          const endIdx = Math.min(startIdx + batchSize, itemsToProcess.length);
+          const batch = itemsToProcess.slice(startIdx, endIdx);
+          
+          for (const item of batch) {
+            try {
+              if (!item.date) continue;
               
-              // Categorize as mandatory or optional expense
-              if (optionalCategories.includes(item.category)) {
+              // Convert date to month key (YYYY-MM)
+              const date = new Date(item.date);
+              const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+              const monthLabel = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+              
+              // Create or update monthly data
+              if (!monthlyData.has(monthKey)) {
+                monthlyData.set(monthKey, {
+                  month: monthLabel,
+                  income: 0,
+                  mandatoryExpenses: 0,
+                  optionalExpenses: 0,
+                  netCashFlow: 0,
+                  scenarioIncome: 0,
+                  scenarioMandatoryExpenses: 0,
+                  scenarioOptionalExpenses: 0,
+                  scenarioNetCashFlow: 0
+                });
+              }
+              
+              const monthData = monthlyData.get(monthKey)!;
+              
+              // Add to the appropriate category based on item type
+              if (item.type === 'income') {
                 if (isScenario) {
-                  monthData.scenarioOptionalExpenses = (monthData.scenarioOptionalExpenses || 0) + expenseAmount;
-                  monthData.scenarioNetCashFlow = (monthData.scenarioNetCashFlow || 0) - expenseAmount;
+                  monthData.scenarioIncome = (monthData.scenarioIncome || 0) + item.amount;
+                  monthData.scenarioNetCashFlow = (monthData.scenarioNetCashFlow || 0) + item.amount;
                 } else {
-                  monthData.optionalExpenses += expenseAmount;
-                  monthData.netCashFlow -= expenseAmount;
+                  monthData.income += item.amount;
+                  monthData.netCashFlow += item.amount;
                 }
-              } else {
-                if (isScenario) {
-                  monthData.scenarioMandatoryExpenses = (monthData.scenarioMandatoryExpenses || 0) + expenseAmount;
-                  monthData.scenarioNetCashFlow = (monthData.scenarioNetCashFlow || 0) - expenseAmount;
+              } else if (item.type === 'expense' || item.type === 'bill') {
+                const expenseAmount = Math.abs(item.amount);
+                
+                // Categorize as mandatory or optional expense
+                if (optionalCategories.includes(item.category)) {
+                  if (isScenario) {
+                    monthData.scenarioOptionalExpenses = (monthData.scenarioOptionalExpenses || 0) + expenseAmount;
+                    monthData.scenarioNetCashFlow = (monthData.scenarioNetCashFlow || 0) - expenseAmount;
+                  } else {
+                    monthData.optionalExpenses += expenseAmount;
+                    monthData.netCashFlow -= expenseAmount;
+                  }
                 } else {
-                  monthData.mandatoryExpenses += expenseAmount;
-                  monthData.netCashFlow -= expenseAmount;
+                  if (isScenario) {
+                    monthData.scenarioMandatoryExpenses = (monthData.scenarioMandatoryExpenses || 0) + expenseAmount;
+                    monthData.scenarioNetCashFlow = (monthData.scenarioNetCashFlow || 0) - expenseAmount;
+                  } else {
+                    monthData.mandatoryExpenses += expenseAmount;
+                    monthData.netCashFlow -= expenseAmount;
+                  }
                 }
               }
+              
+              // Update the map
+              monthlyData.set(monthKey, monthData);
+            } catch (err) {
+              console.warn("Error processing item for monthly breakdown:", err);
             }
-            
-            // Update the map
-            monthlyData.set(monthKey, monthData);
-          } catch (err) {
-            console.warn("Error processing item for monthly breakdown:", err);
+          }
+          
+          // Schedule next batch with small delay to allow UI to update
+          if (batchIndex < totalBatches - 1) {
+            setTimeout(() => processBatch(batchIndex + 1), 0);
           }
         }
       };
@@ -610,73 +650,166 @@ export default function ForecastingPage() {
       };
     }
 
-    // Get starting balance (current balance)
-    const startingBalance = financialData.profileData?.currentBalance || 0;
-    
-    // Calculate projected income (sum of all positive amounts)
-    const projectedIncome = forecastData
-      .filter(item => item.type === 'income')
-      .reduce((sum, item) => sum + item.amount, 0);
-    
-    // Calculate projected expenses (sum of all negative amounts)
-    let projectedExpenses = forecastData
-      .filter(item => item.type === 'expense')
-      .reduce((sum, item) => sum + Math.abs(item.amount), 0);
-    
-    // If not including optional expenses, reduce the total
-    if (!includeOptionalExpenses) {
-      // Exclude optional expenses (we'll assume all expenses with category 'Entertainment' or 'Personal' are optional)
-      const optionalCategories = ['Entertainment', 'Personal', 'Dining', 'Shopping'];
-      const optionalExpenses = forecastData
-        .filter(item => item.type === 'expense' && optionalCategories.includes(item.category))
-        .reduce((sum, item) => sum + Math.abs(item.amount), 0);
+    try {
+      // Get starting balance (current balance)
+      const startingBalance = financialData.profileData?.currentBalance || 0;
       
-      projectedExpenses -= optionalExpenses;
+      // Calculate projected income (sum of all positive amounts)
+      // Optimize by using reduce only once with a condition
+      const { totalIncome, totalExpenses, optionalExpenses } = forecastData.reduce(
+        (acc, item) => {
+          if (item.type === 'income') {
+            acc.totalIncome += item.amount;
+          } else if (item.type === 'expense' || item.type === 'bill') {
+            const expenseAmount = Math.abs(item.amount);
+            acc.totalExpenses += expenseAmount;
+            
+            // Track optional expenses separately
+            const optionalCategories = ['Entertainment', 'Personal', 'Dining', 'Shopping'];
+            if (optionalCategories.includes(item.category)) {
+              acc.optionalExpenses += expenseAmount;
+            }
+          }
+          return acc;
+        },
+        { totalIncome: 0, totalExpenses: 0, optionalExpenses: 0 }
+      );
+      
+      // Calculate adjusted expenses based on optional expenses filter
+      const adjustedExpenses = includeOptionalExpenses ? 
+        totalExpenses : 
+        totalExpenses - optionalExpenses;
+      
+      // Get ending balance (last item's running balance)
+      // Handle case where running balance might not be calculated
+      let endingBalance: number;
+      if (forecastData.length > 0) {
+        const lastItem = forecastData[forecastData.length - 1];
+        if (lastItem.runningBalance !== undefined) {
+          endingBalance = lastItem.runningBalance;
+        } else {
+          // If running balance not calculated, estimate it
+          endingBalance = startingBalance + totalIncome - adjustedExpenses;
+        }
+      } else {
+        endingBalance = startingBalance;
+      }
+      
+      return {
+        projectedIncome: totalIncome.toFixed(2),
+        projectedExpenses: adjustedExpenses.toFixed(2),
+        endingBalance: endingBalance.toFixed(2)
+      };
+    } catch (error) {
+      console.error("Error calculating period totals:", error);
+      return {
+        projectedIncome: "0.00",
+        projectedExpenses: "0.00",
+        endingBalance: financialData.profileData?.currentBalance?.toFixed(2) || "0.00"
+      };
     }
-    
-    // Get ending balance (last item's running balance)
-    const endingBalance = forecastData.length > 0 
-      ? forecastData[forecastData.length - 1].runningBalance || startingBalance
-      : startingBalance;
-    
-    return {
-      projectedIncome: projectedIncome.toFixed(2),
-      projectedExpenses: projectedExpenses.toFixed(2),
-      endingBalance: endingBalance.toFixed(2)
-    };
   };
 
   // Format the data for the chart
   const getForecastChartData = () => {
-    // For very large datasets, sample the data to prevent performance issues
-    const maxDataPoints = 100;
-    let dataToProcess = forecastData;
-    
-    if (forecastData.length > maxDataPoints) {
-      console.log(`Sampling chart data from ${forecastData.length} to ${maxDataPoints} points`);
-      // Keep first and last points, then sample the rest evenly
-      const first = forecastData.slice(0, 1);
-      const last = forecastData.slice(-1);
-      const middle = forecastData.slice(1, -1);
-      
-      // Calculate sampling interval
-      const step = Math.floor(middle.length / (maxDataPoints - 2));
-      const sampledMiddle = [];
-      for (let i = 0; i < middle.length; i += step) {
-        sampledMiddle.push(middle[i]);
+    try {
+      // Limit the maximum number of data points based on forecast period
+      let maxDataPoints = 100;
+      switch (forecastPeriod) {
+        case "1m": maxDataPoints = 60; break; // 2 points per day
+        case "3m": maxDataPoints = 100; break; // ~1 point per day
+        case "6m": maxDataPoints = 120; break; // ~0.6 points per day  
+        case "12m": maxDataPoints = 180; break; // ~0.5 points per day
+        default: maxDataPoints = 100;
       }
       
-      dataToProcess = [...first, ...sampledMiddle, ...last];
+      // If no data, return empty array
+      if (!forecastData || forecastData.length === 0) {
+        return [];
+      }
+      
+      // For very large datasets, sample the data to prevent performance issues
+      let dataToProcess = forecastData;
+      
+      if (forecastData.length > maxDataPoints) {
+        console.log(`Sampling chart data from ${forecastData.length} to ${maxDataPoints} points`);
+        
+        // Always keep first and last points for accurate visualization
+        const first = forecastData.slice(0, 1);
+        const last = forecastData.slice(-1);
+        
+        // For the middle points, use a smart sampling approach
+        // that preserves important events (big income/expense changes)
+        const middle = forecastData.slice(1, -1);
+        
+        // First, identify significant events (large balance changes)
+        const significantThreshold = 0.05; // 5% change in balance
+        const startBalance = first[0].runningBalance || 0;
+        const significantEvents = middle.filter((item, index) => {
+          if (index === 0) return false;
+          
+          const prevBalance = middle[index - 1].runningBalance || 0;
+          const currBalance = item.runningBalance || 0;
+          
+          // Calculate percentage change relative to start balance
+          const change = Math.abs(currBalance - prevBalance);
+          const percentChange = startBalance > 0 ? change / startBalance : 0;
+          
+          return percentChange > significantThreshold;
+        });
+        
+        // Take up to 20% of points as significant events
+        const maxSignificantEvents = Math.ceil(maxDataPoints * 0.2);
+        const selectedSignificantEvents = significantEvents.slice(0, maxSignificantEvents);
+        
+        // Distribute remaining points evenly
+        const remainingPointsCount = maxDataPoints - first.length - last.length - selectedSignificantEvents.length;
+        const step = Math.max(1, Math.floor(middle.length / remainingPointsCount));
+        
+        const sampledMiddle = [];
+        for (let i = 0; i < middle.length; i += step) {
+          // Skip if this point is already included as a significant event
+          if (!selectedSignificantEvents.some(event => event === middle[i])) {
+            sampledMiddle.push(middle[i]);
+            
+            // Stop if we've collected enough points
+            if (sampledMiddle.length >= remainingPointsCount) break;
+          }
+        }
+        
+        // Combine all points and sort by date
+        const allSampledPoints = [...first, ...selectedSignificantEvents, ...sampledMiddle, ...last];
+        
+        // Sort by date to ensure correct order
+        dataToProcess = allSampledPoints.sort((a, b) => 
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        
+        // Cap at maximum data points if we still have too many
+        if (dataToProcess.length > maxDataPoints) {
+          dataToProcess = dataToProcess.slice(0, maxDataPoints);
+        }
+      }
+      
+      // Transform the data for the chart in an optimized way
+      return dataToProcess.map(item => {
+        const optionalCategories = ['Entertainment', 'Personal', 'Dining', 'Shopping'];
+        const isOptionalExpense = item.type === 'expense' && optionalCategories.includes(item.category);
+        const isMandatoryExpense = item.type === 'expense' && !optionalCategories.includes(item.category);
+        
+        return {
+          date: new Date(item.date).toLocaleDateString(),
+          balance: item.runningBalance || 0,
+          income: item.type === 'income' ? item.amount : 0,
+          mandatoryExpenses: isMandatoryExpense ? Math.abs(item.amount) : 0,
+          optionalExpenses: isOptionalExpense ? Math.abs(item.amount) : 0,
+          projectedBalance: item.runningBalance || 0
+        };
+      });
+    } catch (error) {
+      console.error("Error generating chart data:", error);
+      return [];
     }
-    
-    return dataToProcess.map(item => ({
-      date: new Date(item.date).toLocaleDateString(),
-      balance: item.runningBalance || 0,
-      income: item.type === 'income' ? item.amount : 0,
-      mandatoryExpenses: item.type === 'expense' && !['Entertainment', 'Personal', 'Dining', 'Shopping'].includes(item.category) ? Math.abs(item.amount) : 0,
-      optionalExpenses: item.type === 'expense' && ['Entertainment', 'Personal', 'Dining', 'Shopping'].includes(item.category) ? Math.abs(item.amount) : 0,
-      projectedBalance: item.runningBalance || 0
-    }));
   };
 
   const totals = getPeriodTotals();

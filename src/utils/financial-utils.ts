@@ -4,102 +4,201 @@ import { Income, Bill, Expense, Budget, ForecastItem, BalanceAdjustment } from '
  * Calculates the next occurrence of a date based on a recurrence pattern
  */
 export function calculateNextOccurrence(startDate: string, frequency: string): string {
-  const date = new Date(startDate);
-  const now = new Date();
-  
-  // If the date is in the future, return it
-  if (date > now) {
-    return date.toISOString();
-  }
-
-  // Calculate the next occurrence based on frequency
-  let nextDate = new Date(date);
-  
-  switch (frequency) {
-    case 'daily':
-      nextDate.setDate(nextDate.getDate() + 1);
-      break;
-    case 'weekly':
-      nextDate.setDate(nextDate.getDate() + 7);
-      break;
-    case 'biweekly':
-      nextDate.setDate(nextDate.getDate() + 14);
-      break;
-    case 'monthly':
-      nextDate.setMonth(nextDate.getMonth() + 1);
-      break;
-    case 'quarterly':
-      nextDate.setMonth(nextDate.getMonth() + 3);
-      break;
-    case 'semiannually':
-      nextDate.setMonth(nextDate.getMonth() + 6);
-      break;
-    case 'annually':
-      nextDate.setFullYear(nextDate.getFullYear() + 1);
-      break;
-    default:
-      // If no recurrence, return the original date
+  try {
+    const date = new Date(startDate);
+    const now = new Date();
+    
+    // If the date is in the future, return it
+    if (date > now) {
       return date.toISOString();
-  }
+    }
 
-  // If the calculated date is still in the past, recursively calculate the next one
-  if (nextDate <= now) {
-    return calculateNextOccurrence(nextDate.toISOString(), frequency);
+    // Calculate the next occurrence based on frequency
+    let nextDate = new Date(date);
+    
+    // Prevention: If date is invalid, reset to today
+    if (isNaN(nextDate.getTime())) {
+      return new Date().toISOString();
+    }
+    
+    // Memory optimization: limit recursion for very old dates
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    
+    // If date is very old, fast forward to reduce recursion
+    if (nextDate < twoYearsAgo) {
+      switch (frequency) {
+        case 'daily':
+          nextDate = new Date(now);
+          nextDate.setDate(nextDate.getDate() - 1);
+          break;
+        case 'weekly':
+          nextDate = new Date(now);
+          nextDate.setDate(nextDate.getDate() - 7);
+          break;
+        case 'biweekly':
+          nextDate = new Date(now);
+          nextDate.setDate(nextDate.getDate() - 14);
+          break;
+        case 'monthly':
+          nextDate = new Date(now);
+          nextDate.setMonth(nextDate.getMonth() - 1);
+          break;
+        case 'quarterly':
+          nextDate = new Date(now);
+          nextDate.setMonth(nextDate.getMonth() - 3);
+          break;
+        case 'semiannually':
+          nextDate = new Date(now);
+          nextDate.setMonth(nextDate.getMonth() - 6);
+          break;
+        case 'annually':
+          nextDate = new Date(now);
+          nextDate.setFullYear(nextDate.getFullYear() - 1);
+          break;
+        default:
+          return now.toISOString();
+      }
+    }
+    
+    switch (frequency) {
+      case 'daily':
+        nextDate.setDate(nextDate.getDate() + 1);
+        break;
+      case 'weekly':
+        nextDate.setDate(nextDate.getDate() + 7);
+        break;
+      case 'biweekly':
+        nextDate.setDate(nextDate.getDate() + 14);
+        break;
+      case 'monthly':
+        nextDate.setMonth(nextDate.getMonth() + 1);
+        break;
+      case 'quarterly':
+        nextDate.setMonth(nextDate.getMonth() + 3);
+        break;
+      case 'semiannually':
+        nextDate.setMonth(nextDate.getMonth() + 6);
+        break;
+      case 'annually':
+        nextDate.setFullYear(nextDate.getFullYear() + 1);
+        break;
+      default:
+        // If no recurrence, return the original date
+        return date.toISOString();
+    }
+
+    // If the calculated date is still in the past, recursively calculate the next one
+    // Limit recursion depth to prevent stack overflow
+    if (nextDate <= now) {
+      // Fast forward algorithm to reduce recursion depth
+      let iterations = 0;
+      while (nextDate <= now && iterations < 100) {
+        iterations++;
+        
+        switch (frequency) {
+          case 'daily':
+            nextDate.setDate(nextDate.getDate() + 1);
+            break;
+          case 'weekly':
+            nextDate.setDate(nextDate.getDate() + 7);
+            break;
+          case 'biweekly':
+            nextDate.setDate(nextDate.getDate() + 14);
+            break;
+          case 'monthly':
+            nextDate.setMonth(nextDate.getMonth() + 1);
+            break;
+          case 'quarterly':
+            nextDate.setMonth(nextDate.getMonth() + 3);
+            break;
+          case 'semiannually':
+            nextDate.setMonth(nextDate.getMonth() + 6);
+            break;
+          case 'annually':
+            nextDate.setFullYear(nextDate.getFullYear() + 1);
+            break;
+        }
+      }
+      
+      // If we still couldn't get a future date, just return tomorrow
+      if (nextDate <= now) {
+        nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + 1);
+      }
+    }
+    
+    return nextDate.toISOString();
+  } catch (error) {
+    console.error("Error in calculateNextOccurrence:", error);
+    // Return tomorrow as a fallback
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString();
   }
-  
-  return nextDate.toISOString();
 }
 
 /**
  * Generates all future occurrences of a recurring item for the next specified days
+ * Optimized to prevent memory issues
  */
 export function generateOccurrences<T extends { id: string; frequency: string; amount: number; endDate?: string }>(
   item: T, 
   dateField: keyof T, 
   days: number = 90
 ): Array<ForecastItem> {
-  // For non-recurring items, just return the single occurrence
-  if (!item.frequency || item.frequency === 'once') {
-    return [{
-      itemId: item.id,
-      date: item[dateField] as string,
-      amount: item.amount,
-      category: (item as any).category || 'unknown',
-      name: (item as any).name || 'Unnamed Item',
-      type: item.amount >= 0 ? 'income' : 'expense'
-    }];
-  }
+  try {
+    // For non-recurring items, just return the single occurrence
+    if (!item.frequency || item.frequency === 'once') {
+      return [{
+        itemId: item.id,
+        date: item[dateField] as string,
+        amount: item.amount,
+        category: (item as any).category || 'unknown',
+        name: (item as any).name || 'Unnamed Item',
+        type: item.amount >= 0 ? 'income' : 'expense'
+      }];
+    }
 
-  const occurrences: ForecastItem[] = [];
-  
-  // Set end date to now + days for the forecast period
-  const startDate = new Date();
-  const endDate = new Date();
-  endDate.setDate(endDate.getDate() + days);
-  
-  // Start from the original date or today if it's in the past
-  let currentDate = new Date(item[dateField] as string);
-  if (currentDate < startDate) {
-    // If the original date is in the past, calculate the next occurrence from today
-    currentDate = new Date(calculateNextOccurrence(startDate.toISOString(), item.frequency));
-  }
-  
-  // Generate occurrences until we reach the end date
-  while (currentDate <= endDate) {
-    occurrences.push({
-      itemId: item.id,
-      date: currentDate.toISOString(),
-      amount: item.amount,
-      category: (item as any).category || 'unknown',
-      name: (item as any).name || 'Unnamed Item',
-      type: item.amount >= 0 ? 'income' : 'expense'
-    });
+    const occurrences: ForecastItem[] = [];
     
-    // Calculate the next occurrence based on the frequency
-    currentDate = new Date(calculateNextOccurrence(currentDate.toISOString(), item.frequency));
+    // Limit maximum number of occurrences to prevent memory issues
+    const MAX_OCCURRENCES = 100;
+    
+    // Set end date to now + days for the forecast period
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + days);
+    
+    // Start from the original date or today if it's in the past
+    let currentDate = new Date(item[dateField] as string);
+    if (currentDate < startDate) {
+      // If the original date is in the past, calculate the next occurrence from today
+      currentDate = new Date(calculateNextOccurrence(startDate.toISOString(), item.frequency));
+    }
+    
+    // Generate occurrences until we reach the end date
+    let count = 0;
+    while (currentDate <= endDate && count < MAX_OCCURRENCES) {
+      occurrences.push({
+        itemId: item.id,
+        date: currentDate.toISOString(),
+        amount: item.amount,
+        category: (item as any).category || 'unknown',
+        name: (item as any).name || 'Unnamed Item',
+        type: item.amount >= 0 ? 'income' : 'expense'
+      });
+      
+      // Calculate the next occurrence based on the frequency
+      currentDate = new Date(calculateNextOccurrence(currentDate.toISOString(), item.frequency));
+      count++;
+    }
+    
+    return occurrences;
+  } catch (error) {
+    console.error("Error in generateOccurrences:", error);
+    return [];
   }
-  
-  return occurrences;
 }
 
 /**
@@ -115,15 +214,21 @@ export function generateCashFlowForecast(
   days: number = 90
 ): ForecastItem[] {
   try {
+    // Performance guard: cap maximum days to prevent browser crashes
+    const MAX_FORECAST_DAYS = 365;
+    
     // Normalize all inputs to prevent errors
     const normalizedBalance = isNaN(currentBalance) ? 0 : currentBalance;
-    const normalizedDays = (!days || isNaN(days) || days <= 0 || days > 365) ? 90 : days;
+    const normalizedDays = (!days || isNaN(days) || days <= 0) ? 90 : Math.min(days, MAX_FORECAST_DAYS);
     
     // Ensure arrays are valid and limit their size to prevent processing too much
-    const validIncomes = Array.isArray(incomes) ? incomes.slice(0, 100) : [];
-    const validBills = Array.isArray(bills) ? bills.slice(0, 100) : [];
-    const validExpenses = Array.isArray(expenses) ? expenses.slice(0, 100) : [];
-    const validAdjustments = Array.isArray(balanceAdjustments) ? balanceAdjustments.slice(0, 50) : [];
+    // More aggressive limits for longer forecast periods
+    const MAX_ITEMS = normalizedDays <= 30 ? 100 : 50;
+    
+    const validIncomes = Array.isArray(incomes) ? incomes.slice(0, MAX_ITEMS) : [];
+    const validBills = Array.isArray(bills) ? bills.slice(0, MAX_ITEMS) : [];
+    const validExpenses = Array.isArray(expenses) ? expenses.slice(0, MAX_ITEMS) : [];
+    const validAdjustments = Array.isArray(balanceAdjustments) ? balanceAdjustments.slice(0, 25) : [];
     
     console.log('Generating forecast with:', {
       balance: normalizedBalance,
@@ -146,6 +251,9 @@ export function generateCashFlowForecast(
       description: 'Starting balance'
     }];
     
+    // Memory guard: cap total forecast items
+    const MAX_FORECAST_ITEMS = normalizedDays <= 30 ? 500 : 1000;
+    
     // Function to safely add items to forecast
     const safelyAddItems = (
       items: any[], 
@@ -154,20 +262,36 @@ export function generateCashFlowForecast(
     ) => {
       let processed = 0;
       
+      // Performance optimization: stop adding more items if we're over the limit
+      if (forecast.length >= MAX_FORECAST_ITEMS) {
+        console.warn(`Maximum forecast items (${MAX_FORECAST_ITEMS}) reached. Skipping remaining ${itemType} items.`);
+        return;
+      }
+      
       for (const item of items) {
         try {
           const result = processItem(item);
           
           if (Array.isArray(result)) {
-            forecast.push(...result);
-            processed += result.length;
-          } else if (result) {
+            // Only add as many items as we can fit under the limit
+            const canAdd = Math.min(result.length, MAX_FORECAST_ITEMS - forecast.length);
+            if (canAdd > 0) {
+              forecast.push(...result.slice(0, canAdd));
+              processed += canAdd;
+            }
+          } else if (result && forecast.length < MAX_FORECAST_ITEMS) {
             forecast.push(result);
             processed++;
           }
           
+          // Stop if we've reached the limit
+          if (forecast.length >= MAX_FORECAST_ITEMS) {
+            console.warn(`Maximum forecast items (${MAX_FORECAST_ITEMS}) reached during ${itemType} processing.`);
+            break;
+          }
+          
           // Performance safeguard: don't process too many items
-          if (processed > 1000) {
+          if (processed > MAX_FORECAST_ITEMS / 2) {
             console.warn(`Processing limit reached for ${itemType}. Some items may be omitted.`);
             break;
           }
@@ -183,59 +307,66 @@ export function generateCashFlowForecast(
     
     // Process incomes with proper recurring handling based on forecast length
     safelyAddItems(validIncomes, (income) => {
-      // Only process valid income items
-      if (!income.id || !income.date || isNaN(income.amount)) return null;
+      // Skip invalid income items to prevent errors
+      if (!income || !income.id || !income.date || isNaN(income.amount)) return null;
       
-      // For recurring items in short forecasts, only generate if they occur in the period
-      if (income.isRecurring && income.frequency && !isShortForecast) {
-        return generateOccurrences(
-          {
-            ...income,
-            id: income.id,
-            frequency: income.frequency,
-            amount: income.amount
-          },
-          'date',
-          normalizedDays
-        );
-      } else if (income.isRecurring && income.frequency && isShortForecast) {
-        // For short forecasts, only include if the next occurrence is within the forecast period
-        const nextDate = new Date(calculateNextOccurrence(income.date, income.frequency));
+      // Performance optimization: skip $0 incomes
+      if (income.amount === 0) return null;
+      
+      try {
+        // For recurring items in short forecasts, only generate if they occur in the period
+        if (income.isRecurring && income.frequency && !isShortForecast) {
+          return generateOccurrences(
+            {
+              ...income,
+              id: income.id,
+              frequency: income.frequency,
+              amount: income.amount
+            },
+            'date',
+            normalizedDays
+          );
+        } else if (income.isRecurring && income.frequency && isShortForecast) {
+          // For short forecasts, only include if the next occurrence is within the forecast period
+          const nextDate = new Date(calculateNextOccurrence(income.date, income.frequency));
+          const forecastEndDate = new Date();
+          forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
+          
+          if (nextDate <= forecastEndDate) {
+            return {
+              itemId: income.id,
+              date: nextDate.toISOString(),
+              amount: income.amount,
+              category: income.category || 'Income',
+              name: income.name || 'Income',
+              type: 'income',
+              runningBalance: 0, // Will be calculated later
+              description: `${income.name} (${income.category}) - Next occurrence`
+            };
+          }
+          return null;
+        }
+        
+        // For non-recurring items, just add the single occurrence if within forecast period
+        const itemDate = new Date(income.date);
+        const currentDate = new Date();
         const forecastEndDate = new Date();
         forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
         
-        if (nextDate <= forecastEndDate) {
+        if (itemDate >= currentDate && itemDate <= forecastEndDate) {
           return {
             itemId: income.id,
-            date: nextDate.toISOString(),
+            date: income.date,
             amount: income.amount,
             category: income.category || 'Income',
             name: income.name || 'Income',
             type: 'income',
             runningBalance: 0, // Will be calculated later
-            description: `${income.name} (${income.category}) - Next occurrence`
+            description: `${income.name} (${income.category})`
           };
         }
-        return null;
-      }
-      
-      // For non-recurring items, just add the single occurrence if within forecast period
-      const itemDate = new Date(income.date);
-      const currentDate = new Date();
-      const forecastEndDate = new Date();
-      forecastEndDate.setDate(forecastEndDate.getDate() + normalizedDays);
-      
-      if (itemDate >= currentDate && itemDate <= forecastEndDate) {
-        return {
-          itemId: income.id,
-          date: income.date,
-          amount: income.amount,
-          category: income.category || 'Income',
-          name: income.name || 'Income',
-          type: 'income',
-          runningBalance: 0, // Will be calculated later
-          description: `${income.name} (${income.category})`
-        };
+      } catch (error) {
+        console.error("Error processing income item:", error);
       }
       return null;
     }, 'income');
