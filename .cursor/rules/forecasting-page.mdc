@@ -1,0 +1,94 @@
+---
+description: Designing and codeing the forecasting page
+globs: 
+alwaysApply: false
+---
+Feature Specification: Forecasting Page
+
+Overview:This document defines the layout and functionality of the Forecasting Page in the Achievr app. The goal is to provide users with clear, interactive insights into their projected financial trajectory over various time spans, with scenario simulation capabilities.
+
+▶ Top Section: Summary Widgets
+
+Display 4 key metrics at the top of the page. These should respond to a user-selected forecast range (options: 1 month, 3 months, 6 months, 12 months):
+
+Current Available
+
+Current balance minus any savings committed to active goals.
+
+Projected Income
+
+Total of all recurring incomes and other expected income events scheduled within the selected range.
+
+Projected Expenses
+
+Total of all recurring bills/expenses and other known expense events within the selected range.
+
+Projected Available
+
+Calculated as: Current Balance + Projected Income - Projected Expenses.
+
+▶ Middle Section: Cash Flow Over Time Graph
+
+A full-width dynamic graph showing cash flow movement over time within the selected forecast window:
+
+X-Axis: Date range (based on filter)
+
+Y-Axis: Projected account balance
+
+Line Graph shows running balance starting from current available balance
+
+Each point on the graph represents one or more income or expense events
+
+Hover Tooltip for Graph Dots:
+
+Date of event
+
+Starting balance that day
+
+All income entries with descriptions and values
+
+All expense/bill entries with descriptions and values
+
+▶ Bottom Section
+
+Left Widget: Monthly Breakdown
+
+Display monthly net cash flow for each of the next 12 months
+
+Net = Total income - Total expenses for each month
+
+Display visually as a bar or mini line chart with net positive/negative indicators
+
+Right Widget: Scenario Simulation Tool
+
+Allow users to simulate future financial changes. Options include:
+
+Increase income by a fixed %
+
+Apply a raise to specific recurring income line items
+
+Adjust recurring bills/expenses by a %
+
+Add a monthly savings increase (fixed $)
+
+Add a one-time unexpected expense (fixed $)
+
+Add a one-time unexpected income/gift (fixed $)
+
+Behavior:
+
+After scenario is applied, all widgets (including the top 4 and main graph) show both:
+
+Original projection
+
+Scenario-adjusted projection
+
+Clearly distinguish projections (e.g., color-coded lines or dual value display)
+
+Scenario mode is additive: it overlays on top of the existing forecast data
+
+Design Notes:
+
+This page contains no other widgets
+
+Layout must be clean, responsive, and performant with variable event data

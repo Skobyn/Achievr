@@ -1,0 +1,77 @@
+---
+description: Forecasting page best practices
+globs: 
+alwaysApply: false
+---
+For anything that requires data retrieval, data calculations, forecasting, etc.. always refer to the following best practices first:
+
+---
+
+### 1. Client-Side Code Optimizations
+
+- **Efficient Data Processing:**
+  - **Reduce Redundant Date Conversions:**  
+    Cache or pre-compute timestamps rather than repeatedly creating new Date objects in loops.
+  - **Optimize Grouping Logic:**  
+    Instead of filtering the full dataset repeatedly to fill in missing data (like running balances), consider iterating once through sorted data while keeping track of the last known balance.
+  - **Modularize Complex Logic:**  
+    Extract complex loops and data grouping logic into separate helper functions. This makes your code easier to test and maintain.
+  - **Precision Handling:**  
+    Use financial math libraries (like Big.js or decimal.js) to avoid floating-point errors in your currency calculations.
+
+- **React and Rendering Efficiency:**
+  - **Memoization:**  
+    Continue using `useMemo` for expensive computations and consider wrapping functions like `applyScenario` in `useCallback` to prevent unnecessary re-creations.
+  - **Component Memoization:**  
+    Use `React.memo` on your chart components or parts of your UI (like tooltips) to avoid re-rendering when props haven't changed.
+  - **Batched Updates:**  
+    Group state updates together (especially when updating forecast data, summary metrics, and monthly breakdown) to minimize re-renders.
+  - **Lazy Loading & Virtualization:**  
+    For large datasets, consider lazy-loading chart data and virtualizing lists within tooltips to keep the UI responsive.
+
+---
+
+### 2. Firestore (Firebase) Best Practices
+
+- **Optimized Queries and Indexing:**
+  - **Structured Queries & Composite Indexes:**  
+    Make sure your queries are designed to fetch only the necessary data. Use composite indexes where needed to speed up query performance.
+  - **Query Limits & Pagination:**  
+    Use limits on your queries or implement pagination if you expect large datasets. This minimizes data transfer and reduces client processing time.
+  - **Data Aggregation:**  
+    If your forecasting calculations require combining data from many documents, consider pre-aggregating data on the backend (using Cloud Functions) or during write operations. This results in summary documents that the client can quickly load.
+    
+- **Offline Caching and Real-Time Listeners:**
+  - **Firestore Offline Persistence:**  
+    Leverage Firestore’s offline capabilities to cache data locally. This can reduce repeated reads and improve perceived performance.
+  - **Use Listeners Judiciously:**  
+    While real-time updates are powerful, they can trigger unnecessary re-renders if your data updates frequently. Consider using one-time fetches (get() queries) for data that doesn’t require real-time updates.
+
+- **Client-Side Caching with Libraries:**
+  - Integrate caching libraries like React Query or SWR to manage data fetching, caching, and background updates efficiently. This reduces the load on Firestore by avoiding duplicate queries and ensures that your UI displays data quickly.
+
+---
+
+### 3. Monitoring and Testing
+
+- **Performance Monitoring:**  
+  Use Firebase Performance Monitoring to keep an eye on your query speeds and overall app responsiveness. This can help you identify bottlenecks in both the frontend and Firestore interactions.
+- **Robust Unit Testing:**  
+  Develop comprehensive tests for your forecasting logic, including edge cases (e.g., periods with no transactions or sudden balance changes). This ensures accuracy across different scenarios.
+- **Error Handling & Debugging:**  
+  Implement robust error handling for both data processing and network requests. Consider gating debug logs behind a flag so they can be easily disabled in production to improve performance.
+
+---
+
+### Overall Strategy
+
+- **Streamline Data Handling:**  
+  Optimize your data processing pipelines by reducing redundant operations and using memoization. This ensures that the forecasting calculations remain fast and accurate, even as the dataset grows.
+- **Leverage Firestore Best Practices:**  
+  Structure your Firestore data and queries for efficiency. Pre-aggregate where possible, use pagination, and take full advantage of Firestore’s offline persistence.
+- **Balance Real-Time Needs:**  
+  While real-time listeners are useful, determine whether every part of your forecasting page needs instant updates. Use one-time fetches where real-time isn’t critical, reducing unnecessary re-rendering.
+
+By combining these strategies, you can ensure that your forecasting page is both highly performant and accurate, providing a smooth user experience while keeping your Firebase costs and load manageable.
+
+If you have any further questions or need more detailed guidance on a specific part of your implementation, feel free to ask!

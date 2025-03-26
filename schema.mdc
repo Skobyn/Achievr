@@ -1,0 +1,294 @@
+---
+description: Schema for data
+globs: 
+alwaysApply: false
+---
+# Family Finance Tracker: Supabase Schema Documentation
+
+This document provides a comprehensive overview of the Family Finance Tracker's database schema implemented in Supabase PostgreSQL. This schema is designed to efficiently handle financial data including incomes, expenses, bills, forecasting, and budgeting with appropriate security controls.
+
+## Database Architecture Overview
+
+The schema follows these design principles:
+- Clear separation of different financial data types (incomes, bills, expenses)
+- Strong user data isolation via Row Level Security
+- Optimized indexing for common query patterns
+- Support for complex forecasting and analytical operations
+- Default categories and metrics to improve user experience
+
+## Core Tables
+
+### Profiles
+
+Extends the built-in Supabase auth.users table with application-specific user details.
+
+```sql
+CREATE TABLE profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id),
+    display_name TEXT,
+    avatar_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**Security:** Users can only access their own profile data.
+
+### Incomes
+
+Tracks all income sources, both one-time and recurring.
+
+```sql
+CREATE TABLE incomes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id),
+    name TEXT NOT NULL,
+    amount NUMERIC(12,2) NOT NULL,
+    frequency TEXT CHECK (frequency IN ('once', 'weekly', 'biweekly', 'monthly', 'quarterly', 'annually')),
+    start_date DATE NOT NULL,
+    end_date DATE, -- nullable for ongoing recurring incomes
+    is_predicted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**Indexes:** 
+- `user_id` - For filtering by user
+- `start_date` - For date-range queries
+
+### Bills
+
+Tracks recurring and one-time bills.
+
+```sql
+CREATE TABLE bills (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id),
+    name TEXT NOT NULL,
+    amount NUMERIC(12,2) NOT NULL,
+    due_date DATE NOT NULL,
+    frequency TEXT CHECK (frequency IN ('once', 'weekly', 'biweekly', 'monthly', 'quarterly', 'annually')),
+    is_recurring BOOLEAN DEFAULT FALSE,
+    is_paid BOOLEAN DEFAULT FALSE,
+    auto_pay BOOLEAN DEFAULT FALSE,
+    category TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**Indexes:**
+- `user_id` - For filtering by user
+- `due_date` - For date-range queries and upcoming bill calculations
+
+### Expenses
+
+Tracks both planned and unplanned expenses.
+
+```sql
+CREATE TABLE expenses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id),
+    name TEXT NOT NULL,
+    amount NUMERIC(12,2) NOT NULL,
+    expense_date DATE NOT NULL,
+    frequency TEXT CHECK (frequency IN ('once', 'weekly', 'biweekly', 'monthly', 'quarterly', 'annually')),
+    is_recurring BOOLEAN DEFAULT FALSE,
+    is_planned BOOLEAN DEFAULT TRUE, -- distinguishes scheduled vs. unexpected
+    category TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**Indexes:**
+- `user_id` - For filtering by user
+- `expense_date` - For date-range queries
+
+### Categories
+
+Standardizes categories across the application with default system categories and user-defined ones.
+
+```sql
+CREATE TABLE categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id),
+    name TEXT NOT NULL,
+    type TEXT CHECK (type IN ('income', 'expense')),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(user_id, name, type)
+);
+```
+
+**Note:** System-wide categories have `user_id` set to NULL, while user-specific categories reference a user.
+
+## Budget and Forecasting
+
+### Budgets
+
+Tracks monthly budget allocations and actual spending by category.
+
+```sql
+CREATE TABLE budgets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id),
+    category TEXT NOT NULL,
+    month DATE NOT NULL, -- canonical date (e.g., first of month)
+    allocated_amount NUMERIC(12,2) NOT NULL,
+    spent_amount NUMERIC(12,2) DEFAULT 0, -- can be computed or stored
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**Indexes:**
+- `user_id` - For filtering by user
+- `month` - For time-series analysis
+
+### Forecast Metrics
+
+Reference table for types of forecasts the system can generate.
+
+```sql
+CREATE TABLE forecast_metrics (
+    id SERIAL PRIMARY KEY,
+    metric_name TEXT NOT NULL,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### Forecasting Data
+
+Stores the actual forecasted values for different metrics over time.
+
+```sql
+CREATE TABLE forecasting_data (
+    id SERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id),
+    forecast_date DATE NOT NULL,
+    metric_value NUMERIC NOT NULL,
+    metric_id INTEGER REFERENCES forecast_metrics(id),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**Indexes:**
+- `user_id` - For filtering by user
+- `forecast_date` - For time-series analysis
+
+## Security Model
+
+### Row Level Security (RLS)
+
+All tables have Row Level Security enabled, ensuring:
+- Users can only access their own data
+- System-wide reference data (like default categories) is accessible to all users
+- Protected operations respect user boundaries
+
+Example RLS policy:
+```sql
+CREATE POLICY "Users can CRUD their own incomes"
+    ON incomes
+    USING (user_id = auth.uid())
+    WITH CHECK (user_id = auth.uid());
+```
+
+### Automated User Profile Creation
+
+A database trigger creates profile records automatically when users sign up:
+
+```sql
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, display_name)
+  VALUES (new.id, new.email);
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
+
+## Querying Patterns
+
+### Common Query Patterns
+
+1. **Monthly Cash Flow**
+   ```sql
+   SELECT 
+     date_trunc('month', start_date) as month,
+     SUM(amount) as total_income
+   FROM incomes
+   WHERE user_id = auth.uid()
+   GROUP BY month
+   ORDER BY month;
+   ```
+
+2. **Upcoming Bills**
+   ```sql
+   SELECT * FROM bills
+   WHERE user_id = auth.uid()
+     AND due_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + interval '30 days')
+     AND (is_paid = false OR is_recurring = true)
+   ORDER BY due_date;
+   ```
+
+3. **Budget Performance**
+   ```sql
+   SELECT 
+     b.category,
+     b.allocated_amount,
+     COALESCE(SUM(e.amount), 0) as actual_spent
+   FROM budgets b
+   LEFT JOIN expenses e ON 
+     e.user_id = b.user_id AND 
+     e.category = b.category AND
+     e.expense_date BETWEEN b.month AND (b.month + interval '1 month - 1 day')
+   WHERE b.user_id = auth.uid()
+     AND b.month = date_trunc('month', CURRENT_DATE)
+   GROUP BY b.category, b.allocated_amount;
+   ```
+
+## Optimization Considerations
+
+1. **Materialized Views**
+   For expensive aggregate computations, consider creating materialized views that can be refreshed periodically.
+
+2. **Partitioning**
+   For large datasets, consider partitioning time-series tables by date ranges.
+
+3. **Indexes**
+   The schema includes indexes on frequently filtered columns:
+   - All `user_id` fields
+   - All date fields used in range queries
+   - Columns frequently used in WHERE clauses
+
+4. **Data Consistency**
+   The schema uses CHECK constraints to ensure data integrity (e.g., for frequency values and transaction types).
+
+## Default Data
+
+The schema includes pre-populated data for:
+
+1. **Default Categories**
+   - Income: Salary, Investments, Side Hustle
+   - Expense: Rent/Mortgage, Utilities, Groceries, Entertainment, Transportation, Healthcare, Dining Out, Shopping, Subscriptions
+
+2. **Forecast Metrics**
+   - Cash Flow
+   - Savings
+   - Expense Trend
+
+## Data Flow and Relationships
+
+- `auth.users` ← `profiles`: One-to-one relationship between authentication and user profile
+- `auth.users` ← `[incomes, bills, expenses, budgets, forecasting_data]`: One-to-many relationship between users and their financial data
+- `categories` ← `[bills, expenses]`: Many-to-many relationship between categories and financial transactions
+- `forecast_metrics` ← `forecasting_data`: One-to-many relationship between metric types and forecasted values 
