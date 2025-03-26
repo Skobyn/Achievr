@@ -142,6 +142,7 @@ export const GOAL_CATEGORIES = [
 
 // User financial profile with account balances
 export interface FinancialProfile {
+  id?: string;
   userId: string;
   currentBalance: number;
   lastUpdated: string;

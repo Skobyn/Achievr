@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAuth } from '@/providers/firebase-auth-provider';
+import { useAuth } from '@/providers/supabase-auth-provider';
 import {
   Income, Bill, Expense, Budget, Goal, FinancialProfile
 } from '@/types/financial';

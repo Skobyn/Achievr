@@ -964,4 +964,81 @@ export const getCashFlowData = async (userId: string, startDate: string, endDate
     console.error('Error getting cash flow data:', error);
     throw error;
   }
+};
+
+// Mark a bill as paid
+export const markBillAsPaid = async (id: string, userId: string, paidDate?: string): Promise<void> => {
+  try {
+    const payDate = paidDate || new Date().toISOString();
+    
+    // Update the bill in the database
+    const { error } = await supabase
+      .from('bills')
+      .update({
+        is_paid: true,
+        paid_date: payDate,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('user_id', userId);
+    
+    if (error) throw error;
+    
+    // Check if this is a recurring bill that needs to create its next instance
+    const { data: bill, error: fetchError } = await supabase
+      .from('bills')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+    
+    if (fetchError) throw fetchError;
+    
+    if (bill.is_recurring) {
+      // Calculate the next due date based on frequency
+      let nextDueDate = new Date(bill.due_date);
+      
+      switch (bill.frequency) {
+        case 'weekly':
+          nextDueDate.setDate(nextDueDate.getDate() + 7);
+          break;
+        case 'biweekly':
+          nextDueDate.setDate(nextDueDate.getDate() + 14);
+          break;
+        case 'monthly':
+          nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+          break;
+        case 'quarterly':
+          nextDueDate.setMonth(nextDueDate.getMonth() + 3);
+          break;
+        case 'annually':
+          nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
+          break;
+        default:
+          // For 'once', don't create a new instance
+          return;
+      }
+      
+      // Check if we've reached the end date (if specified)
+      if (bill.end_date && new Date(nextDueDate) > new Date(bill.end_date)) {
+        return; // Don't create a new bill if we've passed the end date
+      }
+      
+      // Create the next instance of this recurring bill
+      const nextBillDate = nextDueDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+      
+      // Update the current bill with the next_due_date
+      const { error: updateError } = await supabase
+        .from('bills')
+        .update({
+          next_due_date: nextBillDate
+        })
+        .eq('id', id);
+      
+      if (updateError) throw updateError;
+    }
+  } catch (error) {
+    console.error('Error marking bill as paid:', error);
+    throw error;
+  }
 }; 
