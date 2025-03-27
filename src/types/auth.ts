@@ -6,5 +6,5 @@ export interface Auth {
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserInfo: (userInfo: Partial<User>) => Promise<void>;
-  debugForceLogin?: () => Promise<any>; // Add the debug function (optional)
+  debugForceLogin?: () => Promise<void>; // Explicitly specify Promise<void>
 } 

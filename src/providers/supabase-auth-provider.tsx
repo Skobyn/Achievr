@@ -501,7 +501,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('DEBUG: Test user created and session established');
         console.log('DEBUG: User:', testUser);
         
-        return testUser;
+        // Don't return the user object to match the Promise<void> return type
       } catch (error) {
         console.error('DEBUG: Error creating test session:', error);
       } finally {
