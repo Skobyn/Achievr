@@ -15,6 +15,9 @@ export default function AuthCallback() {
       setStatus('Processing authentication callback...');
       
       try {
+        // Clear any existing redirect loop blockers
+        document.cookie = 'redirect_loop_blocker=; Max-Age=0; path=/';
+        
         const { searchParams } = new URL(window.location.href);
         const code = searchParams.get('code');
         
@@ -46,7 +49,18 @@ export default function AuthCallback() {
           return;
         }
         
-        console.log('Auth successful, user ID:', data.session.user.id);
+        // Verify the session was properly set
+        const { data: { session }, error: verifyError } = await supabase.auth.getSession();
+        
+        if (verifyError || !session) {
+          console.error('Session verification failed:', verifyError);
+          setError('Failed to verify session');
+          setStatus('Authentication failed');
+          setTimeout(() => router.push('/auth/signin'), 2000);
+          return;
+        }
+        
+        console.log('Auth successful, user ID:', session.user.id);
         setStatus('Authentication successful! Redirecting...');
         
         // Set the flag for successful sign-in
