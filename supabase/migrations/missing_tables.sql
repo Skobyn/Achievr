@@ -39,7 +39,7 @@ CREATE POLICY "Users can CRUD their own goals"
     USING (user_id = auth.uid())
     WITH CHECK (user_id = auth.uid());
 
--- Create households table
+-- Create households table (with initial simple policies)
 CREATE TABLE IF NOT EXISTS households (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -50,6 +50,21 @@ CREATE TABLE IF NOT EXISTS households (
 
 CREATE INDEX IF NOT EXISTS idx_households_created_by ON households(created_by);
 
+-- Create household_members table
+CREATE TABLE IF NOT EXISTS household_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+    profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(household_id, profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_household_members_household ON household_members(household_id);
+CREATE INDEX IF NOT EXISTS idx_household_members_profile ON household_members(profile_id);
+
+-- Now set up RLS policies in the correct order
 ALTER TABLE households ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view households they are a member of"
     ON households
@@ -71,20 +86,6 @@ CREATE POLICY "Only creator can create household"
     ON households
     FOR INSERT
     WITH CHECK (created_by = auth.uid());
-
--- Create household_members table
-CREATE TABLE IF NOT EXISTS household_members (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
-    profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now(),
-    UNIQUE(household_id, profile_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_household_members_household ON household_members(household_id);
-CREATE INDEX IF NOT EXISTS idx_household_members_profile ON household_members(profile_id);
 
 ALTER TABLE household_members ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Household owners can manage members"
