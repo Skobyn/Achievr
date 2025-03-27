@@ -54,13 +54,27 @@ const initializeUserProfile = async (supabaseUser: SupabaseUser) => {
     console.log("Checking profile for user:", supabaseUser.id);
     
     // Check if user has a profile already
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', supabaseUser.id)
-      .single();
-    
-    if (profileError || !profile) {
+    try {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .single();
+      
+      if (profileError) {
+        if (profileError.code === 'PGRST116') {
+          // Profile not found - normal for new users
+          console.log("Profile not found for user, will create one");
+        } else {
+          // Other error
+          console.error("Error fetching profile:", profileError);
+        }
+      } else if (profile) {
+        console.log("User profile already exists");
+        return true;
+      }
+      
+      // Profile doesn't exist, create one
       console.log("Creating profile for user:", supabaseUser.id);
       
       // Get user metadata
@@ -72,8 +86,7 @@ const initializeUserProfile = async (supabaseUser: SupabaseUser) => {
         .insert({
           id: supabaseUser.id,
           email: supabaseUser.email,
-          first_name: metadata.first_name,
-          last_name: metadata.last_name,
+          display_name: metadata.full_name || metadata.name || supabaseUser.email?.split('@')[0] || 'User',
           avatar_url: metadata.avatar_url
         });
       
@@ -83,8 +96,8 @@ const initializeUserProfile = async (supabaseUser: SupabaseUser) => {
       } else {
         console.log("Profile created successfully");
       }
-    } else {
-      console.log("User profile already exists");
+    } catch (profileError) {
+      console.error("Profile check/create failed:", profileError);
     }
     
     // Check if user has a household - try/catch to handle missing table
@@ -94,7 +107,9 @@ const initializeUserProfile = async (supabaseUser: SupabaseUser) => {
         .select('id')
         .eq('created_by', supabaseUser.id);
       
-      if (!householdError && (!households || households.length === 0)) {
+      if (householdError) {
+        console.warn("Could not check households, table may not exist yet:", householdError.message);
+      } else if (!households || households.length === 0) {
         console.log("Creating default household for user:", supabaseUser.id);
         
         // Create default household
@@ -111,26 +126,33 @@ const initializeUserProfile = async (supabaseUser: SupabaseUser) => {
           console.warn("Could not create household, table may not exist yet:", createError.message);
         } else if (household) {
           // Add user as household owner
-          const { error: memberError } = await supabase
-            .from('household_members')
-            .insert({
-              household_id: household.id,
-              profile_id: supabaseUser.id,
-              role: 'owner'
-            });
-          
-          if (memberError) {
-            console.warn("Could not create household member, table may not exist yet:", memberError.message);
-          } else {
-            console.log("Household created successfully");
+          try {
+            const { error: memberError } = await supabase
+              .from('household_members')
+              .insert({
+                household_id: household.id,
+                profile_id: supabaseUser.id,
+                role: 'owner'
+              });
+            
+            if (memberError) {
+              console.warn("Could not create household member, table may not exist yet:", memberError.message);
+            } else {
+              console.log("Household created successfully");
+            }
+          } catch (memberError) {
+            console.warn("Failed to create household member:", memberError);
           }
         }
+      } else {
+        console.log("User already has a household");
       }
     } catch (householdError) {
       // Households table may not exist yet - that's okay
-      console.warn("Could not check or create household - tables may not exist yet");
+      console.warn("Could not check or create household - tables may not exist yet:", householdError);
     }
     
+    // Always return true to not block authentication
     return true;
   } catch (error) {
     console.error("Error initializing user profile:", error);

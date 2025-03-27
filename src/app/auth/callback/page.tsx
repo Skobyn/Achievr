@@ -7,58 +7,102 @@ import { toast } from 'sonner';
 
 export default function AuthCallback() {
   const router = useRouter();
-  const [message, setMessage] = useState('Completing sign in...');
+  const [status, setStatus] = useState('Initializing...');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleAuthCallback = async () => {
-      const { searchParams } = new URL(window.location.href);
-      const code = searchParams.get('code');
-      const source = searchParams.get('source');
+      setStatus('Processing authentication callback...');
       
-      if (code) {
-        try {
-          // Exchange the code for a session
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          
-          if (error) throw error;
-          
-          // Set the flag for successful sign-in
-          sessionStorage.setItem('just_signed_in', 'true');
-          
-          if (source === 'verification') {
-            setMessage('Email verified successfully! Redirecting to dashboard...');
-            toast.success('Email verified successfully!');
-          } else {
-            setMessage('Authentication successful! Redirecting...');
-          }
-          
-          // Wait a moment to show the success message before redirecting
-          setTimeout(() => {
-            router.push('/dashboard');
-          }, 1500);
-        } catch (error: any) {
-          console.error('Error exchanging code for session:', error);
-          setMessage('Authentication failed. Redirecting to sign in...');
-          toast.error('Authentication failed: ' + (error.message || 'Unknown error'));
-          
-          // Wait a moment to show the error message before redirecting
-          setTimeout(() => {
-            router.push('/auth/signin?error=Authentication%20failed');
-          }, 1500);
+      try {
+        const { searchParams } = new URL(window.location.href);
+        const code = searchParams.get('code');
+        
+        if (!code) {
+          setError('No authentication code provided');
+          setStatus('Authentication failed');
+          setTimeout(() => router.push('/auth/signin'), 2000);
+          return;
         }
-      } else {
-        router.push('/auth/signin');
+        
+        setStatus('Exchanging code for session...');
+        console.log('Exchanging auth code for session');
+        
+        const { data, error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
+        
+        if (sessionError) {
+          console.error('Session exchange error:', sessionError);
+          setError(sessionError.message);
+          setStatus('Authentication failed');
+          setTimeout(() => router.push('/auth/signin'), 2000);
+          return;
+        }
+        
+        if (!data.session) {
+          console.error('No session data returned');
+          setError('No session data returned');
+          setStatus('Authentication failed');
+          setTimeout(() => router.push('/auth/signin'), 2000);
+          return;
+        }
+        
+        console.log('Auth successful, user ID:', data.session.user.id);
+        setStatus('Authentication successful! Redirecting...');
+        
+        // Set the flag for successful sign-in
+        sessionStorage.setItem('just_signed_in', 'true');
+        
+        // Add a timeout to ensure we don't get stuck
+        setTimeout(() => {
+          console.log('Redirecting to dashboard');
+          router.push('/dashboard');
+        }, 1500);
+      } catch (error: any) {
+        console.error('Uncaught error in auth callback:', error);
+        setError(error.message || 'Unknown error');
+        setStatus('Authentication failed');
+        toast.error(`Authentication error: ${error.message || 'Unknown error'}`);
+        
+        // Redirect back to sign-in after delay
+        setTimeout(() => {
+          router.push('/auth/signin?error=Authentication%20failed');
+        }, 2000);
       }
     };
 
     handleAuthCallback();
+    
+    // Failsafe: If we're still on this page after 10 seconds, redirect to sign-in
+    const timeout = setTimeout(() => {
+      console.warn('Auth callback timeout - redirecting to sign-in');
+      router.push('/auth/signin');
+    }, 10000);
+    
+    return () => clearTimeout(timeout);
   }, [router]);
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <div className="text-center">
-        <h2 className="text-2xl font-semibold mb-4">{message}</h2>
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
+    <div className="flex h-screen flex-col items-center justify-center p-4">
+      <div className="text-center max-w-md w-full">
+        <h2 className="text-2xl font-semibold mb-4">{status}</h2>
+        
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-md mb-4">
+            {error}
+          </div>
+        )}
+        
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
+        
+        <p className="text-muted-foreground text-sm">
+          If you are not redirected automatically, 
+          <button 
+            onClick={() => router.push('/dashboard')} 
+            className="text-primary underline ml-1"
+          >
+            click here
+          </button>
+        </p>
       </div>
     </div>
   );
