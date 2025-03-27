@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CircleDollarSign } from "lucide-react";
-import { useAuth } from "@/providers/firebase-auth-provider";
+import { useAuth } from "@/providers/supabase-auth-provider";
 import { toast } from "sonner";
 
 export function Header() {

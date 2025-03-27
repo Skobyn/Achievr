@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect } from 'react';
-import { useAuth } from '@/providers/firebase-auth-provider';
+import { useAuth } from '@/providers/supabase-auth-provider';
 import { useRouter } from 'next/navigation';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 

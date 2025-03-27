@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuth } from "@/providers/firebase-auth-provider";
+import { useAuth } from "@/providers/supabase-auth-provider";
 import { User, Settings, LogOut, HelpCircle } from "lucide-react";
 
 export function UserNav() {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/providers/firebase-auth-provider";
+import { useAuth } from "@/providers/supabase-auth-provider";
 import { Button } from "@/components/ui/button";
 import { MainLayout } from "@/components/layout/main-layout";
 import { BalanceCard } from "@/components/dashboard/balance-card";

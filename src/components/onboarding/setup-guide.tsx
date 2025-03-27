@@ -44,7 +44,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from '@/providers/firebase-auth-provider';
+import { useAuth } from '@/providers/supabase-auth-provider';
 import { useFinancialData } from '@/hooks/use-financial-data';
 import AddIncomeForm from '../forms/add-income-form';
 import AddExpenseForm from '../forms/add-expense-form';
