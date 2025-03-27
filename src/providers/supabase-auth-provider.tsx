@@ -296,10 +296,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (error) throw error;
       
-      // Set flag that we just signed in to trigger redirect in auth state listener
+      // Set multiple flags for successful auth
       sessionStorage.setItem('just_signed_in', 'true');
+      document.cookie = "just_signed_in=true; path=/";
+      
+      // Clear any redirect loop blockers
+      sessionStorage.removeItem('redirect_loop_blocker');
+      sessionStorage.removeItem('auth_attempted');
+      document.cookie = "redirect_loop_blocker=; max-age=0; path=/";
+      document.cookie = "auth_attempted=; max-age=0; path=/";
       
       toast.success('Signed in successfully');
+      
+      // Force a page reload after sign in to ensure middleware gets correct session
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 500);
     } catch (error: any) {
       console.error('Sign in error:', error);
       toast.error(error.message || 'Failed to sign in');

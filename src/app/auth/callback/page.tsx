@@ -68,11 +68,13 @@ export default function AuthCallback() {
         sessionStorage.setItem('just_signed_in', 'true');
         document.cookie = 'just_signed_in=true; path=/';
         document.cookie = 'redirect_loop_blocker=false; max-age=0; path=/';
+        document.cookie = 'auth_attempted=false; max-age=0; path=/';
         
-        // Add a timeout to ensure we don't get stuck
+        // Add a timeout to ensure we don't get stuck and use direct navigation
         setTimeout(() => {
-          console.log('Redirecting to dashboard');
-          router.push('/dashboard');
+          console.log('Redirecting to dashboard with direct navigation');
+          // Use window.location for a full page load to ensure the session is recognized
+          window.location.href = '/dashboard';
         }, 1500);
       } catch (error: any) {
         console.error('Uncaught error in auth callback:', error);

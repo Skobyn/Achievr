@@ -46,8 +46,11 @@ export default function SignInPage() {
       router.push("/dashboard");
     }
     
-    // Clear any potential redirect loop blockers
+    // Clear any potential redirect or auth flags
     sessionStorage.removeItem("redirect_loop_blocker");
+    sessionStorage.removeItem("auth_attempted");
+    document.cookie = "auth_attempted=; max-age=0; path=/";
+    document.cookie = "redirect_loop_blocker=; max-age=0; path=/";
   }, [user, router]);
 
   // Create form

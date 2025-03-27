@@ -85,26 +85,31 @@ export default function DashboardPage() {
   useEffect(() => {
     console.log("Dashboard auth check - Loading:", loading, "User:", user ? "logged in" : "not logged in");
     
+    // Set a cookie to indicate we're on the dashboard page
+    document.cookie = "on_dashboard=true; path=/";
+    
     // Wait for loading to complete before making decisions
     if (!loading) {
       if (!user) {
         console.log("User not authenticated, redirecting to sign in");
         
-        // Check if we're in a potential redirect loop
-        const redirectLoopBlocker = sessionStorage.getItem("redirect_loop_blocker");
-        if (redirectLoopBlocker === "true") {
-          console.log("Detected potential redirect loop, showing error instead of redirecting");
+        // Check if we've already set a flag to avoid redirect loops
+        const hasAttemptedAuth = sessionStorage.getItem("auth_attempted");
+        
+        if (hasAttemptedAuth === "true") {
+          console.log("Auth already attempted, showing error instead of redirecting");
           toast.error("Authentication issue detected. Please try signing in again.");
-          sessionStorage.removeItem("redirect_loop_blocker");
+          sessionStorage.removeItem("auth_attempted");
         } else {
-          // Set redirect loop blocker and redirect
-          sessionStorage.setItem("redirect_loop_blocker", "true");
+          // Set the auth attempted flag
+          sessionStorage.setItem("auth_attempted", "true");
+          console.log("Redirecting to sign in page");
           router.push("/auth/signin");
         }
       } else {
         console.log("User authenticated:", user.displayName);
-        // Clear redirect loop blocker if user is authenticated
-        sessionStorage.removeItem("redirect_loop_blocker");
+        // Clear any auth attempt flags
+        sessionStorage.removeItem("auth_attempted");
         setAuthChecked(true);
         
         // If the user is new or doesn't have their collections initialized, initialize them
