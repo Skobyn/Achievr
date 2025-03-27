@@ -23,6 +23,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserInfo: (userInfo: Partial<User>) => Promise<void>;
+  debugForceLogin: () => Promise<void>;
 }
 
 // Convert SupabaseUser to our User type
@@ -45,7 +46,8 @@ const AuthContext = createContext<AuthContextType>({
   signInWithGoogle: async () => {},
   signUp: async () => {},
   signOut: async () => {},
-  updateUserInfo: async () => {}
+  updateUserInfo: async () => {},
+  debugForceLogin: async () => {}
 });
 
 // Initialize user profile in database if needed
@@ -474,16 +476,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // FOR DEBUGGING - Add a debug login function 
+  const debugForceLogin = async () => {
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        setLoading(true);
+        console.log('DEBUG: Creating test user session');
+        
+        // Force create a test user
+        const testUser = {
+          id: 'test-user-id',
+          uid: 'test-user-id',
+          email: 'test@example.com',
+          displayName: 'Test User',
+          photoURL: null
+        };
+        
+        // Set the user state directly
+        setUser(testUser);
+        
+        // Store in localStorage for persistence
+        localStorage.setItem('supabase.auth.user', JSON.stringify(testUser));
+        
+        console.log('DEBUG: Test user created and session established');
+        console.log('DEBUG: User:', testUser);
+        
+        return testUser;
+      } catch (error) {
+        console.error('DEBUG: Error creating test session:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{
-      user,
-      loading,
-      signIn,
-      signInWithGoogle,
-      signUp,
-      signOut,
-      updateUserInfo
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        signIn,
+        signInWithGoogle,
+        signUp,
+        signOut,
+        updateUserInfo,
+        debugForceLogin
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -35,7 +35,7 @@ const formSchema = z.object({
 export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { signIn, signInWithGoogle, user } = useAuth();
+  const { signIn, signInWithGoogle, user, debugForceLogin } = useAuth();
 
   // Redirect if already signed in
   useEffect(() => {
@@ -115,6 +115,38 @@ export default function SignInPage() {
       // Error already handled by the auth provider with toast
       setLoading(false);
     }
+  };
+
+  // Debug section for development
+  const renderDebugSection = () => {
+    if (process.env.NODE_ENV !== 'production') {
+      return (
+        <div className="mt-8 pt-4 border-t border-gray-200">
+          <h3 className="text-sm font-medium text-gray-500 mb-2">Debug Tools</h3>
+          <Button 
+            variant="outline" 
+            onClick={async () => {
+              try {
+                if (typeof debugForceLogin === 'function') {
+                  await debugForceLogin();
+                } else {
+                  console.error('DEBUG: debugForceLogin function not found');
+                }
+                
+                // Force navigate to dashboard
+                window.location.href = '/dashboard';
+              } catch (error) {
+                console.error('Error using debug login:', error);
+              }
+            }}
+            className="w-full mt-2"
+          >
+            Debug: Force Login
+          </Button>
+        </div>
+      );
+    }
+    return null;
   };
 
   if (loading) {
@@ -242,6 +274,7 @@ export default function SignInPage() {
           </CardFooter>
         </Card>
       </div>
+      {renderDebugSection()}
     </div>
   );
 }

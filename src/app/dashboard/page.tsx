@@ -64,6 +64,21 @@ function formatCashFlowEvents(bills: Bill[], expenses: Expense[], incomes: Incom
   });
 }
 
+// Utility function to get user from localStorage
+const getLocalUser = () => {
+  if (typeof window === 'undefined') return null;
+  
+  try {
+    const localUserStr = localStorage.getItem('supabase.auth.user');
+    if (localUserStr) {
+      return JSON.parse(localUserStr);
+    }
+  } catch (e) {
+    console.error('Error parsing local user:', e);
+  }
+  return null;
+};
+
 export default function DashboardPage() {
   const { user, loading } = useAuth();
   const { profile, loading: profileLoading, updateBalance } = useFinancialProfile();
@@ -77,55 +92,58 @@ export default function DashboardPage() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const router = useRouter();
 
+  // Initialize localUser state
+  const [localUser, setLocalUser] = useState<any>(null);
+
+  // Add this useEffect to load the local user
+  useEffect(() => {
+    const local = getLocalUser();
+    if (local) {
+      console.log('Found user in localStorage:', local);
+      setLocalUser(local);
+    }
+  }, []);
+
   const cashFlowEvents = useMemo(() => {
     return formatCashFlowEvents(bills || [], expenses || [], incomes);
   }, [bills, expenses, incomes]);
 
-  // Authentication check
+  // Modify the auth check to use localUser as a fallback
   useEffect(() => {
-    console.log("Dashboard auth check - Loading:", loading, "User:", user ? "logged in" : "not logged in");
+    console.log("Dashboard auth check - Loading:", loading, "User:", user ? "logged in" : "not logged in", "LocalUser:", localUser ? "present" : "not present");
     
-    // Check localStorage first for direct auth confirmation
-    if (typeof window !== 'undefined') {
-      const localUser = localStorage.getItem('supabase.auth.user');
-      if (localUser) {
-        console.log("Found user in localStorage, skipping auth redirect");
-        // If we have a local user but no user state yet, we're probably still loading
-        if (!user && loading) {
-          return; // Wait for auth state to catch up
-        }
-      }
+    // If auth is still loading, wait
+    if (loading) return;
+    
+    // If we have an authenticated user, proceed
+    if (user) {
+      console.log("User authenticated:", user.displayName);
+      setAuthChecked(true);
+      initializeUserCollections(user.uid);
+      return;
     }
     
-    // Wait for loading to complete before making decisions
-    if (!loading) {
-      if (!user) {
-        console.log("User not authenticated, redirecting to sign in");
-        
-        // Check if we've already set a flag to avoid redirect loops
-        const hasAttemptedAuth = sessionStorage.getItem("auth_attempted");
-        
-        if (hasAttemptedAuth === "true") {
-          console.log("Auth already attempted, showing error instead of redirecting");
-          toast.error("Authentication issue detected. Please try signing in again.");
-          sessionStorage.removeItem("auth_attempted");
-        } else {
-          // Set the auth attempted flag
-          sessionStorage.setItem("auth_attempted", "true");
-          console.log("Redirecting to sign in page");
-          router.push("/auth/signin");
-        }
-      } else {
-        console.log("User authenticated:", user.displayName);
-        // Clear any auth attempt flags
-        sessionStorage.removeItem("auth_attempted");
-        setAuthChecked(true);
-        
-        // If the user is new or doesn't have their collections initialized, initialize them
-        initializeUserCollections(user.uid);
-      }
+    // If no authenticated user but we have a localStorage user, use that
+    if (!user && localUser) {
+      console.log("Using localStorage user:", localUser.displayName);
+      setAuthChecked(true);
+      initializeUserCollections(localUser.uid);
+      return;
     }
-  }, [user, loading, router]);
+    
+    // No user at all, redirect to signin
+    console.log("No user found, redirecting to sign in");
+    const hasAttemptedAuth = sessionStorage.getItem("auth_attempted");
+    
+    if (hasAttemptedAuth === "true") {
+      console.log("Auth already attempted, showing error instead of redirecting");
+      toast.error("Authentication issue detected. Please try signing in again.");
+      sessionStorage.removeItem("auth_attempted");
+    } else {
+      sessionStorage.setItem("auth_attempted", "true");
+      router.push("/auth/signin");
+    }
+  }, [user, loading, localUser, router]);
 
   // Check if it's a new user to show setup guide
   useEffect(() => {
@@ -249,7 +267,7 @@ export default function DashboardPage() {
   }
 
   // Show loading state while checking authentication or loading profile
-  if (loading || (!authChecked && !user)) {
+  if (loading || (!authChecked && !user && !localUser)) {
     return (
       <MainLayout>
         <div className="flex items-center justify-center min-h-[80vh]">
@@ -271,7 +289,7 @@ export default function DashboardPage() {
   }
 
   // This should never render due to the redirect in useEffect
-  if (!user) {
+  if (!user && !localUser) {
     return (
       <MainLayout>
         <div className="flex items-center justify-center min-h-[80vh]">
