@@ -77,53 +77,65 @@ const initializeUserProfile = async (supabaseUser: SupabaseUser) => {
           avatar_url: metadata.avatar_url
         });
       
-      if (error) throw error;
-      console.log("Profile created successfully");
+      if (error) {
+        // Ignore errors for now - table might not exist yet
+        console.warn("Could not create profile, table may not exist yet:", error.message);
+      } else {
+        console.log("Profile created successfully");
+      }
     } else {
       console.log("User profile already exists");
     }
     
-    // Check if user has a household
-    const { data: households, error: householdError } = await supabase
-      .from('households')
-      .select('id')
-      .eq('created_by', supabaseUser.id);
-    
-    if (!householdError && (!households || households.length === 0)) {
-      console.log("Creating default household for user:", supabaseUser.id);
-      
-      // Create default household
-      const { data: household, error: createError } = await supabase
+    // Check if user has a household - try/catch to handle missing table
+    try {
+      const { data: households, error: householdError } = await supabase
         .from('households')
-        .insert({
-          name: 'My Household',
-          created_by: supabaseUser.id
-        })
         .select('id')
-        .single();
+        .eq('created_by', supabaseUser.id);
       
-      if (createError) throw createError;
-      
-      // Add user as household owner
-      if (household) {
-        const { error: memberError } = await supabase
-          .from('household_members')
-          .insert({
-            household_id: household.id,
-            profile_id: supabaseUser.id,
-            role: 'owner'
-          });
+      if (!householdError && (!households || households.length === 0)) {
+        console.log("Creating default household for user:", supabaseUser.id);
         
-        if (memberError) throw memberError;
+        // Create default household
+        const { data: household, error: createError } = await supabase
+          .from('households')
+          .insert({
+            name: 'My Household',
+            created_by: supabaseUser.id
+          })
+          .select('id')
+          .single();
+        
+        if (createError) {
+          console.warn("Could not create household, table may not exist yet:", createError.message);
+        } else if (household) {
+          // Add user as household owner
+          const { error: memberError } = await supabase
+            .from('household_members')
+            .insert({
+              household_id: household.id,
+              profile_id: supabaseUser.id,
+              role: 'owner'
+            });
+          
+          if (memberError) {
+            console.warn("Could not create household member, table may not exist yet:", memberError.message);
+          } else {
+            console.log("Household created successfully");
+          }
+        }
       }
-      
-      console.log("Household created successfully");
+    } catch (householdError) {
+      // Households table may not exist yet - that's okay
+      console.warn("Could not check or create household - tables may not exist yet");
     }
     
     return true;
   } catch (error) {
     console.error("Error initializing user profile:", error);
-    throw error;
+    // Return true anyway to not block authentication
+    return true;
   }
 };
 

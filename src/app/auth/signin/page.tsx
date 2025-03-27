@@ -133,7 +133,7 @@ export default function SignInPage() {
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input placeholder="name@example.com" type="email" {...field} />
+                        <Input placeholder="name@example.com" type="email" autoComplete="username" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
