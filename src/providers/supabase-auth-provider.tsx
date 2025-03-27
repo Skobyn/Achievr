@@ -288,13 +288,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
+      console.log('Starting sign in process for email:', email);
       
-      const { error } = await supabase.auth.signInWithPassword({
+      // Clear any existing sessions first
+      await supabase.auth.signOut();
+      console.log('Cleared any existing sessions');
+      
+      // Now attempt to sign in
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Sign in error:', error);
+        throw error;
+      }
+      
+      if (!data.session) {
+        console.error('No session returned after sign in');
+        throw new Error('No session returned');
+      }
+      
+      console.log('Sign in successful, session established:', !!data.session);
+      console.log('User ID:', data.session.user.id);
       
       // Set multiple flags for successful auth
       sessionStorage.setItem('just_signed_in', 'true');
@@ -310,6 +327,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Force a page reload after sign in to ensure middleware gets correct session
       setTimeout(() => {
+        console.log('Redirecting to dashboard via direct navigation');
         window.location.href = '/dashboard';
       }, 500);
     } catch (error: any) {
