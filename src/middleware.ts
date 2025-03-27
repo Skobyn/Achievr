@@ -9,6 +9,12 @@ export async function middleware(request: NextRequest) {
 
     console.log(`[MIDDLEWARE] Processing request for path: ${path}`);
 
+    // Explicitly allow debug routes in development
+    if (process.env.NODE_ENV !== 'production' && path === '/auth/debug-login') {
+      console.log(`[MIDDLEWARE] Allowing debug login page`);
+      return NextResponse.next();
+    }
+
     // For now, bypass all auth checks - let all requests through
     // This allows us to troubleshoot the authentication issues
     console.log(`[MIDDLEWARE] TEMPORARY: Bypassing all authentication checks`);

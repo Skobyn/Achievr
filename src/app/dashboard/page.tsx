@@ -104,6 +104,26 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Early check for debug localStorage user without waiting for auth
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const localStorageUser = localStorage.getItem('supabase.auth.user');
+        if (localStorageUser) {
+          const userObj = JSON.parse(localStorageUser);
+          console.log("DEBUG: Found direct user in localStorage:", userObj.displayName);
+          setLocalUser(userObj);
+          setAuthChecked(true);
+          setTimeout(() => {
+            initializeUserCollections(userObj.uid);
+          }, 100);
+        }
+      } catch (e) {
+        console.error("Error checking localStorage for user:", e);
+      }
+    }
+  }, []);
+
   const cashFlowEvents = useMemo(() => {
     return formatCashFlowEvents(bills || [], expenses || [], incomes);
   }, [bills, expenses, incomes]);
@@ -254,6 +274,119 @@ export default function DashboardPage() {
       setTimeout(clearLoadingState, 1000);
     }, 500);
   };
+
+  // Add this function to set up test data for development
+  const initializeTestData = () => {
+    if (process.env.NODE_ENV !== 'production' && localUser?.id === 'test-user-id') {
+      console.log('DEBUG: Setting up test data for development');
+      
+      // Create test data in local state
+      setProfile({
+        id: 'test-user-id',
+        first_name: 'Test',
+        last_name: 'User',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        has_completed_setup: true,
+        created_at: new Date().toISOString()
+      });
+      
+      setHouseholds([{
+        id: 'test-household-id',
+        name: 'Test Household',
+        created_by: 'test-user-id',
+        created_at: new Date().toISOString()
+      }]);
+      
+      // Set some test incomes
+      setIncomes([
+        {
+          id: 'income-1',
+          name: 'Salary',
+          amount: 5000,
+          frequency: 'monthly',
+          category: 'salary',
+          next_date: new Date().toISOString(),
+          user_id: 'test-user-id',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'income-2',
+          name: 'Side Gig',
+          amount: 1000,
+          frequency: 'monthly',
+          category: 'freelance',
+          next_date: new Date().toISOString(),
+          user_id: 'test-user-id',
+          created_at: new Date().toISOString()
+        }
+      ]);
+      
+      // Set some test bills
+      setBills([
+        {
+          id: 'bill-1',
+          name: 'Rent',
+          amount: 1500,
+          due_date: new Date().toISOString(),
+          frequency: 'monthly',
+          category: 'housing',
+          is_paid: false,
+          user_id: 'test-user-id',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'bill-2',
+          name: 'Utilities',
+          amount: 200,
+          due_date: new Date().toISOString(),
+          frequency: 'monthly',
+          category: 'utilities',
+          is_paid: false,
+          user_id: 'test-user-id',
+          created_at: new Date().toISOString()
+        }
+      ]);
+      
+      // Set some test expenses
+      setExpenses([
+        {
+          id: 'expense-1',
+          name: 'Groceries',
+          amount: 500,
+          date: new Date().toISOString(),
+          category: 'food',
+          user_id: 'test-user-id',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'expense-2',
+          name: 'Entertainment',
+          amount: 150,
+          date: new Date().toISOString(),
+          category: 'entertainment',
+          user_id: 'test-user-id',
+          created_at: new Date().toISOString()
+        }
+      ]);
+      
+      setProfileLoading(false);
+      setHouseholdsLoading(false);
+      setIncomesLoading(false);
+      setBillsLoading(false);
+      setExpensesLoading(false);
+      
+      console.log('DEBUG: Test data initialization complete');
+    }
+  };
+
+  // Call this after setting the local user
+  useEffect(() => {
+    if (localUser?.id === 'test-user-id') {
+      console.log('DEBUG: Detected test user, initializing test data');
+      initializeTestData();
+    }
+  }, [localUser]);
 
   // If the component is transitioning, show a loading state
   if (isTransitioning) {

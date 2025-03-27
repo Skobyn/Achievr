@@ -123,21 +123,26 @@ export default function SignInPage() {
       return (
         <div className="mt-8 pt-4 border-t border-gray-200">
           <h3 className="text-sm font-medium text-gray-500 mb-2">Debug Tools</h3>
+          
+          <Button 
+            variant="outline" 
+            onClick={() => window.location.href = '/auth/debug-login'}
+            className="w-full mt-2"
+          >
+            Go to Debug Login Page
+          </Button>
+          
           <Button 
             variant="outline" 
             onClick={async () => {
-              try {
-                if (typeof debugForceLogin === 'function') {
-                  await debugForceLogin();
-                } else {
-                  console.error('DEBUG: debugForceLogin function not found');
-                }
-                
-                // Force navigate to dashboard
-                window.location.href = '/dashboard';
-              } catch (error) {
-                console.error('Error using debug login:', error);
+              if (typeof debugForceLogin === 'function') {
+                await debugForceLogin();
+              } else {
+                console.error('DEBUG: debugForceLogin function not found');
               }
+              
+              // Force navigate to dashboard
+              window.location.href = '/dashboard';
             }}
             className="w-full mt-2"
           >
