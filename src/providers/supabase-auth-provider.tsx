@@ -168,10 +168,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Listen for auth state changes
   useEffect(() => {
-    console.log("Setting up Supabase auth state listener");
+    console.log("Setting up Supabase auth state listener with DEBUG mode");
+    
+    // Add debug logging
+    if (typeof window !== 'undefined') {
+      console.log("DEBUG: Current pathname:", window.location.pathname);
+      console.log("DEBUG: just_signed_in flag:", sessionStorage.getItem('just_signed_in'));
+      console.log("DEBUG: redirect_loop_blocker:", sessionStorage.getItem('redirect_loop_blocker'));
+    }
     
     const loadUserProfile = async (supabaseUser: SupabaseUser) => {
       try {
+        console.log("DEBUG: Loading user profile for ID:", supabaseUser.id);
         // Map basic Supabase user info
         const mappedUser = mapSupabaseUser(supabaseUser);
         
@@ -188,29 +196,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log("DEBUG: Auth state change event:", event);
         setLoading(true);
         
         try {
           if (session?.user) {
+            console.log("DEBUG: Session found with user ID:", session.user.id);
             const userProfile = await loadUserProfile(session.user);
             setUser(userProfile);
             console.log("User authenticated:", userProfile.displayName);
             
-            // Check if we need to redirect to dashboard
-            const justSignedIn = sessionStorage.getItem('just_signed_in');
-            if (justSignedIn === 'true') {
+            // Function to get a cookie value
+            const getCookie = (name: string) => {
+              if (typeof document === 'undefined') return null;
+              const value = `; ${document.cookie}`;
+              const parts = value.split(`; ${name}=`);
+              if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+              return null;
+            };
+            
+            // Check if we need to redirect to dashboard - check both sessionStorage and cookies
+            const justSignedInStorage = sessionStorage.getItem('just_signed_in');
+            const justSignedInCookie = getCookie('just_signed_in');
+            
+            console.log("DEBUG: just_signed_in flags - Storage:", justSignedInStorage, "Cookie:", justSignedInCookie);
+            
+            if (justSignedInStorage === 'true' || justSignedInCookie === 'true') {
               console.log("Just signed in flag detected, redirecting to dashboard");
+              // Clear flags from both storage and cookies
               sessionStorage.removeItem('just_signed_in');
-              sessionStorage.removeItem('redirect_loop_blocker'); // Clear any redirect loop blockers
+              document.cookie = 'just_signed_in=; max-age=0; path=/';
+              sessionStorage.removeItem('redirect_loop_blocker');
+              document.cookie = 'redirect_loop_blocker=; max-age=0; path=/';
               
               // Use router for client-side navigation if we're not already on dashboard
               if (window.location.pathname !== '/dashboard') {
+                console.log("DEBUG: Redirecting to dashboard from path:", window.location.pathname);
                 router.push('/dashboard');
               }
             }
           } else {
+            console.log("DEBUG: No session or user found");
             setUser(null);
-            console.log("No user authenticated");
           }
         } catch (error) {
           console.error("Auth error:", error);
@@ -224,14 +251,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Initial auth check
     const checkCurrentUser = async () => {
       try {
+        console.log("DEBUG: Performing initial auth check");
         setLoading(true);
         
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        const { data: { user: currentUser }, error } = await supabase.auth.getUser();
+        
+        if (error) {
+          console.error("DEBUG: Error getting current user:", error);
+        }
         
         if (currentUser) {
+          console.log("DEBUG: Initial check found user ID:", currentUser.id);
           const userProfile = await loadUserProfile(currentUser);
           setUser(userProfile);
         } else {
+          console.log("DEBUG: Initial check found no user");
           setUser(null);
         }
       } catch (error) {

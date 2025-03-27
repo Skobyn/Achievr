@@ -72,9 +72,14 @@ export default function SignInPage() {
         document.cookie = "remember-me=true; max-age=2592000; path=/"; // 30 days
       }
       
-      // Set flag for redirection
+      // Set flag for redirection in both sessionStorage and cookies
       console.log("Setting just_signed_in flag for redirection");
       sessionStorage.setItem("just_signed_in", "true");
+      document.cookie = "just_signed_in=true; path=/"; // Session cookie
+      
+      // Clear any redirect loop blockers
+      document.cookie = "redirect_loop_blocker=false; max-age=0; path=/";
+      sessionStorage.removeItem("redirect_loop_blocker");
       
       // The redirection will be handled by the auth provider
     } catch (error: any) {

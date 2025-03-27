@@ -63,8 +63,11 @@ export default function AuthCallback() {
         console.log('Auth successful, user ID:', session.user.id);
         setStatus('Authentication successful! Redirecting...');
         
-        // Set the flag for successful sign-in
+        // Set the flag for successful sign-in in both sessionStorage and cookies
+        console.log('Setting authentication success flags');
         sessionStorage.setItem('just_signed_in', 'true');
+        document.cookie = 'just_signed_in=true; path=/';
+        document.cookie = 'redirect_loop_blocker=false; max-age=0; path=/';
         
         // Add a timeout to ensure we don't get stuck
         setTimeout(() => {
