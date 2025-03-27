@@ -270,19 +270,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             full_name: displayName
-          }
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback?source=verification`
         }
       });
       
       if (error) throw error;
       
-      toast.success('Account created successfully. Please check your email for verification.');
+      // Check if email confirmation is required
+      if (data?.user?.identities?.length === 0) {
+        // User already exists but hasn't confirmed email
+        toast.error('An account with this email already exists but is not confirmed. Please check your email for the confirmation link.');
+        return;
+      }
+      
+      if (data?.user?.confirmed_at) {
+        // User is already confirmed, we can log them in immediately
+        toast.success('Account created and verified successfully!');
+        sessionStorage.setItem('just_signed_in', 'true');
+        router.push('/dashboard');
+      } else {
+        // Email confirmation required
+        toast.success('Account created successfully. Please check your email for verification.');
+      }
     } catch (error: any) {
       console.error('Sign up error:', error);
       toast.error(error.message || 'Failed to create account');

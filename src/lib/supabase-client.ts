@@ -4,10 +4,19 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables');
+  console.warn('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Create the Supabase client with enhanced session handling
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: true,
+    storageKey: 'supabase.auth.token',
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce'
+  }
+});
 
 // Helper functions for common database operations
 export const getUser = async () => {
