@@ -290,11 +290,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       console.log('Starting sign in process for email:', email);
       
-      // Clear any existing sessions first
+      // First, clear all auth state
+      localStorage.removeItem('supabase.auth.token');
+      sessionStorage.removeItem('just_signed_in');
+      sessionStorage.removeItem('redirect_loop_blocker');
+      sessionStorage.removeItem('auth_attempted');
+      
+      // Clear cookies
+      document.cookie = "just_signed_in=; max-age=0; path=/";
+      document.cookie = "redirect_loop_blocker=; max-age=0; path=/";
+      document.cookie = "auth_attempted=; max-age=0; path=/";
+      
+      // Sign out completely first
       await supabase.auth.signOut();
       console.log('Cleared any existing sessions');
       
-      // Now attempt to sign in
+      // Now attempt to sign in - use the basic version first
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -310,26 +321,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('No session returned');
       }
       
-      console.log('Sign in successful, session established:', !!data.session);
+      console.log('Sign in successful, session established');
       console.log('User ID:', data.session.user.id);
+      console.log('Access token received, length:', data.session.access_token.length);
       
-      // Set multiple flags for successful auth
-      sessionStorage.setItem('just_signed_in', 'true');
-      document.cookie = "just_signed_in=true; path=/";
+      // Store the user data in localStorage for persistence
+      localStorage.setItem('supabase.auth.user', JSON.stringify(data.user));
       
-      // Clear any redirect loop blockers
-      sessionStorage.removeItem('redirect_loop_blocker');
-      sessionStorage.removeItem('auth_attempted');
-      document.cookie = "redirect_loop_blocker=; max-age=0; path=/";
-      document.cookie = "auth_attempted=; max-age=0; path=/";
+      // Set the user directly rather than waiting for the auth state change
+      const userProfile = mapSupabaseUser(data.user);
+      setUser(userProfile);
       
       toast.success('Signed in successfully');
       
-      // Force a page reload after sign in to ensure middleware gets correct session
-      setTimeout(() => {
-        console.log('Redirecting to dashboard via direct navigation');
-        window.location.href = '/dashboard';
-      }, 500);
+      // Direct navigation to dashboard
+      console.log('Redirecting to dashboard via direct navigation');
+      window.location.href = '/dashboard';
     } catch (error: any) {
       console.error('Sign in error:', error);
       toast.error(error.message || 'Failed to sign in');

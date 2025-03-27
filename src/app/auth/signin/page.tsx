@@ -41,8 +41,19 @@ export default function SignInPage() {
   useEffect(() => {
     console.log("Sign-in page auth check - User:", user ? "logged in" : "not logged in");
     
+    // Check localStorage directly for authentication
+    if (typeof window !== 'undefined') {
+      const localUser = localStorage.getItem('supabase.auth.user');
+      if (localUser) {
+        console.log("User found in localStorage, redirecting to dashboard");
+        window.location.href = "/dashboard";
+        return;
+      }
+    }
+    
+    // Continue with normal auth provider check
     if (user) {
-      console.log("User already authenticated, redirecting to dashboard");
+      console.log("User already authenticated via auth provider, redirecting to dashboard");
       router.push("/dashboard");
     }
     

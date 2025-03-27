@@ -85,8 +85,17 @@ export default function DashboardPage() {
   useEffect(() => {
     console.log("Dashboard auth check - Loading:", loading, "User:", user ? "logged in" : "not logged in");
     
-    // Set a cookie to indicate we're on the dashboard page
-    document.cookie = "on_dashboard=true; path=/";
+    // Check localStorage first for direct auth confirmation
+    if (typeof window !== 'undefined') {
+      const localUser = localStorage.getItem('supabase.auth.user');
+      if (localUser) {
+        console.log("Found user in localStorage, skipping auth redirect");
+        // If we have a local user but no user state yet, we're probably still loading
+        if (!user && loading) {
+          return; // Wait for auth state to catch up
+        }
+      }
+    }
     
     // Wait for loading to complete before making decisions
     if (!loading) {
